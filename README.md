@@ -157,7 +157,7 @@ Billing::Rates#lookup
 ```
 ````
 
-A ceiling that names no unit fails the gate, and so does one whose units all score at or under the floor again. `exhale complexity explain Billing::Rates#lookup` prints a unit's score with every point, its line and the construct that earned it. `--floor N` changes the report for a local run and leaves the exit code on the Contract's floors. `--format json` lists every unit with its score, metaprogramming points and label, and `--format edn` writes the entries crapper writes so uml-viewer can read them.
+A ceiling that names no method or DSL body fails the gate, and so does one whose units all score at or under the floor again. A ceiling only loosens: a max under the floor changes nothing. `exhale complexity explain Billing::Rates#lookup` prints a unit's score with every point, its line and the construct that earned it. `--floor N` changes the report for a local run and leaves the exit code on the Contract's floors. `--format json` lists every unit with its score, metaprogramming points and label, and `--format edn` writes the entries crapper writes so uml-viewer can read them.
 
 With no git repository or no merge base there's nothing to compare, so the run exits 0 and lists the units over the floor as warnings. In CI, run it beside `exhale dry`:
 
