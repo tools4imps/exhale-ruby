@@ -124,6 +124,19 @@ class RatchetContractTest < Minitest::Test
   end
 
   # Contract: ratchet/T1
+  def test_with_no_base_contract_and_parse_errors_still_count
+    Dir.mktmpdir("exhale-no-git") do |dir|
+      write("app/models/order.rb", klass("Order", method("total", 12)), dir: dir)
+      write("contract/billing/complexity.md", "```settings\nfloor: none\n```\n", dir: dir)
+      result = check(root: dir, base: nil)
+      assert_equal [1, :warning], [result.exit_code, row(result, "Order#total").label]
+
+      write("app/models/broken.rb", "class Broken\n  def x(\nend\n", dir: dir)
+      assert_equal 2, check(root: dir, base: nil).exit_code
+    end
+  end
+
+  # Contract: ratchet/T1
   def test_with_no_merge_base_nothing_is_compared
     git("checkout", "-q", "-b", "trunk")
     write("app/models/order.rb", klass("Order", method("total", 12)))
@@ -164,6 +177,35 @@ class RatchetContractTest < Minitest::Test
     assert_operator sum.similarity, :>=, Rational(80, 100)
     refute(result.rows.any? { |r| r.label == :gone })
     assert_match(/was Order#total at app\/models\/order.rb:2-/, Exhale::Report.render(result, "text"))
+  end
+
+  # Shared shapes that stay put would make the renamed method's
+  # fingerprints common and cut their weight; they don't take part.
+  # Contract: ratchet/T2
+  def test_shape_weights_come_from_the_unmatched_units_only
+    commons = (1..20).map { |n| klass("Common#{n}", method("total", 9, tag: "total")) }
+    commons.each_with_index { |source, n| write("app/models/common#{n}.rb", source) }
+    write("app/models/order.rb", klass("Order", method("total", 9)))
+    commit("base")
+    branch
+    write("app/models/order.rb", klass("Order"))
+    write("app/models/invoice.rb", klass("Invoice", method("sum", 10, tag: "total")))
+
+    sum = row(check, "Invoice#sum")
+    entries = [sum.head, sum.base].each_with_index.map do |scored, id|
+      tree = Exhale::Dry::Fingerprints.build(Exhale::Dry::Normalizer.normalize(scored.unit))
+      Exhale::Dry::Entry.new(id: id, unit: scored.unit, tree: tree, set: tree.digests)
+    end
+    index = Exhale::Dry::Index.new(entries)
+    head, base = entries
+    assert_equal index.score(head.set, head.total, base.set, base.total), sum.similarity
+    everything = Exhale::Dry::Index.new(entries + commons.each_with_index.map do |source, n|
+      unit = Exhale::Units::Ruby.extract(source, "c#{n}.rb").first
+      tree = Exhale::Dry::Fingerprints.build(Exhale::Dry::Normalizer.normalize(unit))
+      Exhale::Dry::Entry.new(id: n + 2, unit: unit, tree: tree, set: tree.digests)
+    end)
+    refute_equal everything.score(head.set, everything.weight_of(head.set), base.set, everything.weight_of(base.set)),
+                 sum.similarity
   end
 
   # Contract: ratchet/T2
@@ -319,6 +361,19 @@ class RatchetContractTest < Minitest::Test
     write("app/models/order.rb", klass("Order", method("rates", 15)))
     result = check
     assert_equal [:raised, 1], [row(result, "Order#rates").label, result.exit_code]
+  end
+
+  # Contract: ratchet/T6
+  def test_a_kept_unit_already_past_its_max_passes_until_it_rises
+    write("contract/billing/complexity.md", CEILING)
+    write("app/models/order.rb", klass("Order", method("rates", 16)))
+    commit("base")
+    branch
+    write("app/models/order.rb", klass("Order", method("rates", 16), method("other", 1, tag: "o")))
+    assert_equal [:unchanged, 0], [row(check, "Order#rates").label, check.exit_code]
+
+    write("app/models/order.rb", klass("Order", method("rates", 17)))
+    assert_equal [:raised, 1], [row(check, "Order#rates").label, check.exit_code]
   end
 
   # Contract: ratchet/T6

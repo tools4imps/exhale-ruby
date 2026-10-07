@@ -114,6 +114,12 @@ class CognitiveContractTest < Minitest::Test
       ["begin\n  b\nensure\n  d if a\nend", 1],
       # a condition sits at its construct's level, not inside it
       ["if a ? b : c\n  d\nend", 2],
+      ["while a ? b : c\n  d\nend", 2],
+      ["case a ? b : c\nwhen 1 then d\nend", 2],
+      # when and in branches sit inside their case: 1 for the case, 2 each
+      # for the ternaries in a when's condition and in an in's body
+      ["case a\nwhen (b ? 1 : 2) then c\nend", 3],
+      ["case a\nin Integer then b ? c : d\nend", 3],
       # 1 for the if, 2 for the each inside it, 3 for the unless in the block
       ["if a\n  xs.each do |x|\n    next unless x\n  end\nend", 6]
     ]
@@ -203,7 +209,8 @@ class CognitiveContractTest < Minitest::Test
     names = %w[each each_with_object each_with_index each_slice each_pair map flat_map collect filter_map select
                filter reject find detect find_index find_all any? all? none? one? count sum inject reduce group_by
                partition sort_by min_by max_by minmax_by uniq zip take_while drop_while chunk_while slice_when
-               times upto downto step loop cycle]
+               times upto downto step loop cycle with_index with_object map! collect! select! filter! reject!
+               sort_by!]
     names.each do |name|
       assert_equal 1, method_score("xs.#{name} { |x| x }"), "#{name} iterates"
       assert_equal 1, method_score("xs.#{name} do |x|\n  x\nend"), "#{name} do-block iterates"
@@ -215,12 +222,15 @@ class CognitiveContractTest < Minitest::Test
     assert_table [
       ["xs.tap { |x| x }", 0],
       ["xs.then { |x| x }", 0],
-      ["xs.each.with_index { |x, i| x }", 0],
-      ["xs.map! { |x| x }", 0],
+      ["xs.sort { |a, b| a <=> b }", 0],
+      ["xs.sort! { |a, b| a <=> b }", 0],
       ["Struct.new(:a) { def b = 1 }", 0],
       ["xs.map(&:to_s)", 0],
       ["xs.each(&method(:puts))", 0],
       ["xs.select(&block)", 0],
+      # the block goes to with_index, which iterates; each alone has none
+      ["xs.each.with_index { |x, i| x }", 1],
+      ["xs.map.with_object([]) { |x, memo| memo << x }", 1],
       # 1 for the outer each, 2 for the map inside it
       ["xs.each { |x| x.map { |y| y } }", 3],
       ["5.times { a }\nloop { break }", 2]

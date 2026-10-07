@@ -21,6 +21,7 @@ class RatchetTest < Minitest::Test
 
   # A class reopened in two files repeats an identity across them; each
   # head unit pairs with the base unit in its own file.
+  # Contract: ratchet/T2
   def test_a_repeated_identity_pairs_within_its_file_first
     base = scored("class A\n#{method('x', 2)}end\n", "a.rb") + scored("class A\n#{method('x', 5)}end\n", "b.rb")
     head = scored("class A\n#{method('x', 9)}end\n", "b.rb") + scored("class A\n#{method('x', 2)}end\n", "c.rb")
@@ -36,6 +37,7 @@ class RatchetTest < Minitest::Test
     assert_equal %i[kept scored], ratchet(head, nil, ceiling: ceiling).rows.map(&:label)
   end
 
+  # Contract: ratchet/T6
   def test_the_most_specific_ceiling_wins_and_a_tie_takes_the_lower_max
     Dir.mktmpdir("exhale-ceilings") do |dir|
       FileUtils.mkdir_p(File.join(dir, "app", "models"))

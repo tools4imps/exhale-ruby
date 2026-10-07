@@ -21,6 +21,7 @@ module Exhale
         each map flat_map collect filter_map select filter reject find detect find_index find_all
         any? all? none? one? count sum inject reduce group_by partition sort_by min_by max_by minmax_by
         uniq zip take_while drop_while chunk_while slice_when times upto downto step loop cycle
+        with_index with_object map! collect! select! filter! reject! sort_by!
       ].freeze
 
       METAPROGRAMMING = %i[
