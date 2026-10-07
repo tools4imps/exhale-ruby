@@ -137,6 +137,35 @@ class CognitiveContractTest < Minitest::Test
     ]
   end
 
+  # Every part of a construct is read: what sits in its condition,
+  # targets, rescue list or parameters scores at the construct's own level,
+  # and what sits in its bodies scores one deeper.
+  # Contract: cognitive/K2
+  def test_every_part_of_a_construct_is_read_at_its_level
+    assert_table [
+      # an outer ternary, then 2 for the one in its else
+      ["a ? b : (c ? d : xs)", 3],
+      ["if a\n  b\nelsif c && d\n  xs\nend", 3],
+      ["if a\n  b\nelsif c\n  d ? 1 : 2\nend", 4],
+      ["unless a && b\n  c\nend", 2],
+      ["unless a\n  b ? c : d\nend", 3],
+      ["for (a ? b : c).attr in xs\n  d\nend", 2],
+      ["for x in (a ? xs : [])\n  b\nend", 2],
+      ["case a\nwhen 1 then b\nelse c ? d : xs\nend", 3],
+      # 1 for the case, 1 for the guard, 2 for the ternary pinned in the
+      # pattern, 1 for the guard's run
+      ["case a\nin ^(b ? c : d) if xs && b then 1\nend", 5],
+      ["begin\n  b\nrescue *(a ? xs : [])\n  c\nend", 2],
+      ["begin\n  b\nrescue => (a ? c : d).error\n  xs\nend", 2],
+      ["(a ? b : c) rescue nil", 2],
+      ["b rescue (a ? c : d)", 3],
+      ["(a ? b : c).foo", 1],
+      ["xs.each { |x = (a ? 1 : 2)| x }", 3],
+      ["f = ->(x = (a ? 1 : 2)) { x }", 2]
+    ]
+    assert_equal 1, score_of("def m(a = b ? 1 : 2) = a\n", "Object#m")
+  end
+
   # Contract: cognitive/K2
   def test_a_unit_starts_at_nesting_zero_and_a_dsl_block_is_its_body
     source = <<~RUBY
@@ -172,6 +201,12 @@ class CognitiveContractTest < Minitest::Test
       ["a && !(b && c)", 1],
       ["a && (b && c)", 1],
       ["a && (b || c)", 2],
+      ["a && ()", 1],
+      # parentheses holding more than one statement are an operand
+      ["a && (b; c && d)", 2],
+      # a call's receiver and arguments are expressions of their own
+      ["a && x.foo(b && c)", 2],
+      ["a && (b && c).present?", 2],
       ["a && not(b && c)", 1],
       # two expressions are two runs
       ["x = a && b\ny = c && d", 2],
@@ -209,6 +244,8 @@ class CognitiveContractTest < Minitest::Test
     assert_equal 0, score_of("def walk(n)\n  walker(n)\nend\n", "Object#walk")
     assert_equal 1, score_of("class Tree\n  def self.depth(n)\n    depth(n.left)\n  end\nend\n", "Tree.depth")
     assert_equal 1, score_of("class Tree\n  define_method(:size) { |n| size(n.left) }\nend\n", "Tree#size")
+    # a DSL body has no name to recurse on
+    assert_equal 0, score_of("class A\n  before_save { before_save }\nend\n", "A.before_save[1]")
     # A repeat of an identity in the file still recurses on its own name.
     assert_equal 1, score_of("def x = 1\ndef x(n)\n  x(n)\nend\n", "Object#x[2]")
     points = points_of("def fib(n)\n  if n < 2\n    n\n  else\n    fib(n - 1)\n  end\nend\n", "Object#fib")
@@ -295,6 +332,9 @@ class CognitiveContractTest < Minitest::Test
     assert_equal [[2, "each block", 0, 1], [3, "if", 1, 2], [3, "&&", 1, 1]],
                  points.map { |p| [p.line, p.construct, p.nesting, p.increment] }
     assert_equal 4, score_of(source, "Object#m")
+    # a call's point sits on the line of its name
+    points = points_of("def m(xs)\n  xs\n    .send(:y)\nend\n", "Object#m")
+    assert_equal [[3, "send"]], points.map { |p| [p.line, p.construct] }
   end
 
   # Contract: cognitive/K7
@@ -304,6 +344,8 @@ class CognitiveContractTest < Minitest::Test
     there = Exhale::Units::Ruby.extract("# moved\n\nmodule B\n  class C\n#{method}  end\nend\n", "lib/b.rb").first
     first = Exhale::Complexity::Cognitive.points(here)
     assert_equal first, Exhale::Complexity::Cognitive.points(here)
+    scorer = Exhale::Complexity::Cognitive.new(Prism.parse("def f(n) = f(n)").value.statements.body.first, "f")
+    assert_equal scorer.points, scorer.points
     assert_equal(first.map { |p| [p.construct, p.increment, p.nesting] },
                  Exhale::Complexity::Cognitive.points(there).map { |p| [p.construct, p.increment, p.nesting] })
   end

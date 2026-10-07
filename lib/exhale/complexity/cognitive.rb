@@ -68,8 +68,9 @@ module Exhale
       end
 
       def visit(node, nesting)
+        return if node.nil? || node.is_a?(Prism::DefNode)
+
         case node
-        when nil, Prism::DefNode then nil
         when Prism::IfNode then if_node(node, nesting)
         when Prism::UnlessNode then unless_node(node, nesting)
         when Prism::WhileNode, Prism::UntilNode then loop_node(node, nesting)

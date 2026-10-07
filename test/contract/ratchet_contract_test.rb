@@ -85,6 +85,7 @@ class RatchetContractTest < Minitest::Test
     assert_equal [2, 2, :unchanged], [row(result, "Order#tax").base.score, row(result, "Order#tax").head.score,
                                       row(result, "Order#tax").label]
     assert_equal git("rev-parse", "main").strip, result.base_sha
+    assert_empty result.notes
   end
 
   # Contract: ratchet/T1
@@ -117,6 +118,7 @@ class RatchetContractTest < Minitest::Test
       assert_nil result.base_sha
       assert_equal({ "Order#total" => :warning, "Order#tax" => :scored }, labels(result))
       assert_match(/not a git repository, so nothing is compared/, result.notes.first)
+      refute_match(/pass --base/, result.notes.first)
       text = Exhale::Report.render(result, "text")
       assert_match(/OVER THE FLOOR  Order#total  12 \(floor 8\)/, text)
       assert_match(/clean/, text.lines.first)
@@ -148,14 +150,16 @@ class RatchetContractTest < Minitest::Test
 
   # Contract: ratchet/T1
   def test_with_no_merge_base_nothing_is_compared
-    git("checkout", "-q", "-b", "trunk")
+    write("README.md", "main\n")
+    commit("main")
+    git("checkout", "-q", "--orphan", "unrelated")
     write("app/models/order.rb", klass("Order", method("total", 12)))
-    commit("only a trunk")
+    commit("unrelated history")
 
     result = check(base: nil)
     assert_equal 0, result.exit_code
     assert_equal({ "Order#total" => :warning }, labels(result))
-    assert_match(/so nothing is compared/, result.notes.first)
+    assert_equal "no merge base found, so nothing is compared; units over the floor are warnings", result.notes.first
   end
 
   # Contract: ratchet/T2
@@ -325,6 +329,7 @@ class RatchetContractTest < Minitest::Test
 
   # Contract: ratchet/T5
   def test_the_floor_flag_changes_the_report_and_never_the_verdict
+    write("contract/billing/complexity.md", "```settings\nfloor: 3\n```\n")
     write("app/models/order.rb", klass("Order", method("total", 9)))
     commit("base")
     branch
@@ -332,7 +337,7 @@ class RatchetContractTest < Minitest::Test
 
     loose = check(floor: 20)
     assert_equal({ "Order#total" => :rose, "Order#small" => :new }, labels(loose))
-    assert_equal [20, 1], [loose.floor, loose.exit_code]
+    assert_equal [20, 1, {}], [loose.floor, loose.exit_code, loose.floors]
     assert(loose.notes.any? { |note| note.include?("--floor 20 overrides the Contract for this report only") })
 
     text = Exhale::Report.render(loose, "text")

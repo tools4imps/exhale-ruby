@@ -83,6 +83,23 @@ class ComplexityReportContractTest < Minitest::Test
     TEXT
   end
 
+  # Contract: report/R5
+  def test_text_lists_kept_units_with_their_ceiling
+    kept = result
+    clause = Exhale::Contract::Clause.new("billing", :ceiling, "contract/billing/complexity.md", 7, "Rates stay whole",
+                                          "", [], "k", 9)
+    kept.rows = [Exhale::Complexity::Row.new(label: :kept, head: kept.rows[0].head, base: kept.rows[0].base, floor: 2,
+                                             ceiling: clause)]
+    kept.exit_code = 0
+    assert_equal <<~TEXT, Exhale::Report.render(kept, "text")
+      exhale complexity: 1 units, 1 kept, clean   base aaaaaaa   floor 2
+
+      KEPT  Order#total  3 -> 8 (ceiling 9)  contract/billing/complexity.md:7 "Rates stay whole"
+
+      0 contracted
+    TEXT
+  end
+
   # Contract: report/R2
   def test_the_header_counts_labels_and_errors_and_says_clean_only_on_exit_zero
     passing = result
@@ -95,6 +112,8 @@ class ComplexityReportContractTest < Minitest::Test
     passing.exit_code = 1
     text = Exhale::Report.render(passing, "text")
     assert_match(/1 contract error, failing/, text.lines.first)
+    passing.parse_errors = [Exhale::ParseError.new("app/x.rb", 2, "unexpected end")]
+    assert_match(/1 contract error, 1 parse error, failing/, Exhale::Report.render(passing, "text").lines.first)
     assert_includes text, "CONTRACT  contract/p/complexity.md:3: stale ceiling"
   end
 
@@ -106,6 +125,7 @@ class ComplexityReportContractTest < Minitest::Test
     units = report["units"].map { |u| u.values_at("identity", "label", "score", "base_score", "metaprogramming") }
     assert_equal [["Order#total", "raised", 8, 3, 1], ["Order#fresh", "introduced", 1, nil, 0],
                   ["Order#calm", "contracted", 0, 1, 0], ["Order#old", "gone", nil, 0, 0]], units
+    assert_nil report["units"][1]["base"]
     total = report["units"].first
     assert_equal({ "identity" => "Order#total", "path" => "app/models/order.rb", "start_line" => 2, "end_line" => 4 },
                  total["base"])

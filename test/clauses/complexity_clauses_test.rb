@@ -102,6 +102,14 @@ class ComplexityClausesTest < ContractTestCase
                  c.errors.map { |e| e.message.split(": ", 2).last }
   end
 
+  # Contract: clause/C1
+  def test_other_fenced_blocks_in_complexity_md_are_prose
+    write "contract/p/complexity.md", "```ruby\ndef x = 1\n```\n```ceiling\nmax: 0\nA#x\n```\n"
+    c = complexity_contract
+    assert_empty c.errors
+    assert_equal [0], c.clauses.map(&:max)
+  end
+
   # Contract: clause/C5
   def test_the_floor_is_a_whole_number_set_once
     write "contract/a/complexity.md", "```settings\nfloor: 0\n```\n"

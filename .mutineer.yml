@@ -17,6 +17,18 @@ timeout: 120
 # never run; each one was verified by hand).
 ignore:
 
+  # === lib/exhale/complexity/ratchet.rb ===
+  # Equivalent. Ratchet#shape_matches: dropping the empty-side guard, or
+  # weakening it to `&&`. With no head or no base unit there are no
+  # candidates, so the greedy pass returns [] either way; the guard only
+  # skips normalizing the other side.
+  - "974aaf51c4e0"
+  - "87815e27fe40"
+  # Equivalent. Ratchet#similarity: dropping the size prefilter. Weighted
+  # Jaccard never exceeds the smaller total over the larger, so every pair
+  # close? turns away scores under 0.80 anyway.
+  - "98bbadf329d8"
+
   # === lib/exhale/contract/markdown.rb ===
   # Equivalent. Markdown.step: the `nil` is the branch's return value, and
   # blocks discards step's return value.

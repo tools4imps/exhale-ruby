@@ -30,6 +30,37 @@ class RatchetTest < Minitest::Test
                  rows.map { |r| [r.head.unit.path, r.base.unit.path, r.label] }
   end
 
+  # Contract: ratchet/T2
+  def test_once_a_base_unit_pairs_in_its_own_file_it_isnt_offered_again
+    base = scored("class A\n#{method('x', 2)}end\n", "a.rb") + scored("class A\n#{method('x', 5)}end\n", "b.rb")
+    head = scored("class A\n#{method('x', 2)}end\n", "a.rb") + scored("class A\n#{method('x', 5)}end\n", "c.rb")
+    assert_equal [%w[a.rb a.rb], %w[c.rb b.rb]], ratchet(head, base).rows.map { |r| [r.head.unit.path, r.base.unit.path] }
+  end
+
+  # Contract: ratchet/T6
+  def test_a_kept_unit_that_ends_at_the_floor_only_rose
+    base = scored("class A\n#{method('f', 5)}end\n", "a.rb")
+    ceiling = Exhale::Contract::Clause.new("p", :ceiling, "contract/p/complexity.md", 1, "", "", [], "k", 14)
+    assert_equal [:rose], ratchet(scored("class A\n#{method('f', 8)}end\n", "a.rb"), base, ceiling: ceiling).rows.map(&:label)
+    assert_equal [:kept], ratchet(scored("class A\n#{method('f', 9)}end\n", "a.rb"), base, ceiling: ceiling).rows.map(&:label)
+  end
+
+  # The size prefilter only skips pairs Jaccard can't bring to 0.80, and a
+  # pair at exactly 0.80 matches.
+  # Contract: ratchet/T2
+  def test_the_threshold_is_inclusive_and_the_size_prefilter_exact
+    r = ratchet([], [])
+    assert r.send(:close?, 4, 5)
+    assert r.send(:close?, 5, 4)
+    refute r.send(:close?, 4, 6)
+    entry = Struct.new(:set, :total)
+    index = Object.new
+    def index.score(*) = Rational(4, 5)
+    assert_equal Rational(4, 5), r.send(:similarity, index, entry.new([], 5), entry.new([], 5))
+    def index.score(*) = Rational(79, 100)
+    assert_nil r.send(:similarity, index, entry.new([], 5), entry.new([], 5))
+  end
+
   def test_with_no_base_units_warn_over_their_limit_and_a_ceiling_keeps_them
     head = scored("class A\n#{method('x', 9)}#{method('y', 3)}end\n", "a.rb")
     assert_equal %i[warning scored], ratchet(head, nil).rows.map(&:label)
