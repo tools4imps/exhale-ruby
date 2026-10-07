@@ -7,7 +7,8 @@ require_relative "dry/normalizer"
 module Exhale
   # Renders a duplication check's result as text for the agent doing the
   # exhale, JSON for tools, or EDN in the shape dryer writes to
-  # .metrics/dry.edn.
+  # .metrics/dry.edn. A complexity check's result renders from
+  # report/complexity.rb.
   module Report
     FORMATS = %w[text json edn].freeze
     LABELS = { introduced: "INTRODUCED", shifted: "SHIFTED", already_there: "ALREADY THERE", found: "FOUND" }.freeze
@@ -15,11 +16,15 @@ module Exhale
     module_function
 
     def render(result, format)
+      raise ArgumentError, "unknown format #{format.inspect}" unless FORMATS.include?(format)
+
+      text, json, edn = if result.is_a?(Complexity::Result) then [ComplexityText, ComplexityJson, ComplexityEdn]
+                        else [Text, Json, Edn]
+                        end
       case format
-      when "text" then Text.new(result).render
-      when "json" then JSON.pretty_generate(Json.new(result).to_h)
-      when "edn" then Edn.new(result).render
-      else raise ArgumentError, "unknown format #{format.inspect}"
+      when "text" then text.new(result).render
+      when "json" then JSON.pretty_generate(json.new(result).to_h)
+      else edn.new(result).render
       end
     end
 
@@ -201,3 +206,5 @@ module Exhale
     end
   end
 end
+
+require_relative "report/complexity"

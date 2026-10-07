@@ -6,7 +6,7 @@ Exhale aims to be the premier contraction toolkit for Ruby, the checks for the b
 
 Agents duplicate by default. They read the codebase, find a shape that works, and copy it. When pull requests merge without a person reading every diff, the copy reaches main unless a machine stops it, and every session after that copies it again. exhale is that machine for the exhale half of the breath: expand to learn, then contract what you learned into what already exists, in the same PR.
 
-`exhale dry` combines Robert Martin's [dryer](https://github.com/unclebob/dryer) and Ryan Davis's [flay](https://github.com/seattlerb/flay), rebuilt on [Prism](https://github.com/ruby/prism) and [Herb](https://herb-tools.dev) so it reads modern Ruby and ERB the way Rails writes them. It is the only check in 0.1. A CRAP score check and a leaked-guards check are planned.
+`exhale dry` combines Robert Martin's [dryer](https://github.com/unclebob/dryer) and Ryan Davis's [flay](https://github.com/seattlerb/flay), rebuilt on [Prism](https://github.com/ruby/prism) and [Herb](https://herb-tools.dev) so it reads modern Ruby and ERB the way Rails writes them. The second check, `exhale complexity`, fails a pull request that leaves a method harder to follow than it found it. A CRAP score check and a leaked-guards check are planned.
 
 ## Install
 
@@ -72,6 +72,7 @@ contract/
   provider_adapter/
     README.md        the primitive's prose, plus a covers block
     duplication.md   duplication it keeps, why, and its settings
+    complexity.md    complexity it keeps, why, and its floor
 ```
 
 A `parallel` block declares units that stay parallel on purpose. Its reason is the section it sits in:
@@ -123,6 +124,49 @@ exhale:
 
 `fetch-depth: 0` gives `exhale dry` the history it needs to find the merge base and run `git blame`. `exhale dry --format json` prints the same findings as data, and `--format edn` prints them in the shape dryer writes to `.metrics/dry.edn`.
 
+## exhale complexity
+
+`exhale complexity` scores every Ruby method and Rails DSL body twice, at the head and at the merge base, and fails the pull request when a score rose past the floor. Absolute scores mostly track size and swing from team to team, so the gate judges the change. Code that was already complex passes until someone makes it worse.
+
+The score is G. Ann Campbell's Cognitive Complexity (SonarSource, 2017). A method that reads straight down scores low however long it is. Each `if`, `unless`, ternary, loop, `case`, `rescue` and iterating block costs a point plus how deeply it's nested, so a branch inside a loop inside a block costs 3. An `elsif` or `else` costs 1, and so does each run of `&&` or `||` and a recursive call. Calls like `send`, `define_method` and `instance_eval` cost 1 each and are reported apart as metaprogramming. `contract/cognitive/README.md` writes down every rule, down to which blocks count as iterating.
+
+| Label | Meaning | Gate |
+| --- | --- | --- |
+| Raised | The score rose and ends over the floor | fails |
+| Introduced | A new unit scores over the floor | fails |
+| Kept | The score rose past the floor and stays within a ceiling | passes |
+| Contracted | The score fell | passes |
+| Gone | The base unit has no match at the head | passes |
+
+A method keeps its history when it moves to another file, and when it's renamed: an unmatched new unit is compared with an unmatched old one whose normalized shape scores 0.80 or more against it. Splitting a method passes as long as the method doesn't rise and every new piece ends at or under the floor.
+
+The floor is 8. A primitive can set its own in `complexity.md`, and a `ceiling` block lets a unit go over the floor, up to its max, for the reason in the section it sits in:
+
+````markdown
+```settings
+floor: 10
+```
+
+## The rate table stays one method
+
+Splitting it scatters the regions across files.
+
+```ceiling
+max: 14
+Billing::Rates#lookup
+```
+````
+
+A ceiling that names no unit fails the gate, and so does one whose units all score at or under the floor again. `exhale complexity explain Billing::Rates#lookup` prints a unit's score with every point, its line and the construct that earned it. `--floor N` changes the report for a local run and leaves the exit code on the Contract's floors. `--format json` lists every unit with its score, metaprogramming points and label, and `--format edn` writes the entries crapper writes so uml-viewer can read them.
+
+With no git repository or no merge base there's nothing to compare, so the run exits 0 and lists the units over the floor as warnings. In CI, run it beside `exhale dry`:
+
+```yaml
+    - name: exhale complexity
+      shell: bash
+      run: bin/exhale complexity --base origin/${{ github.base_ref || 'main' }} | tee -a "$GITHUB_STEP_SUMMARY"
+```
+
 ## Determinism
 
 The same commit gets the same verdict on any machine on any day. The verdict reads the commit's tree, its Contract, and the gem versions in its `Gemfile.lock`, and nothing else. Digests are unseeded, weights are fixed-point integers computed without the platform's floating-point log, and every tie breaks on a stable key.
@@ -133,7 +177,7 @@ The same commit gets the same verdict on any machine on any day. The verdict rea
 
 ## How exhale holds itself to this
 
-exhale has its own Contract in `contract/`: 64 numbered obligations across 11 primitives (source, unit, shape, fingerprint, matcher, sweep, gate, clause, report, revision and cli). Every obligation has at least one test that names it with a `# Contract: <primitive>/<id>` comment, and `rake contract` publishes contract coverage and fails while any obligation lacks an executable test. CI also runs `exhale dry` on itself, reading that Contract.
+exhale has its own Contract in `contract/`: 82 numbered obligations across 13 primitives (source, unit, shape, fingerprint, matcher, sweep, gate, clause, report, revision, cli, cognitive and ratchet). Every obligation has at least one test that names it with a `# Contract: <primitive>/<id>` comment, and `rake contract` publishes contract coverage and fails while any obligation lacks an executable test. CI also runs `exhale dry` and `exhale complexity` on itself, reading that Contract.
 
 The mutation gate runs every mutant [Mutineer](https://github.com/davidteren/mutineer) can make of `lib/` against the whole suite. Each one is either killed by a test or listed in `.mutineer.yml` with the reason no test can catch it: an equivalent mutant, an infinite loop, or a line Ruby's coverage can't see. `bin/mutate` runs it under Ruby 3.4. `bin/mutate --matrix` also names the tests that kill no mutant and the tests whose every kill another test also makes; it runs every covering test per mutant, so it is a separate, slower run and not part of the gate.
 
