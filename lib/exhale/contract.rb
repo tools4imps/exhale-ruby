@@ -11,23 +11,38 @@ require_relative "contract/resolver"
 
 module Exhale
   # The Contract: Markdown under <root>/contract/<primitive>/ that declares which
-  # code belongs to a primitive and which units are deliberately parallel.
+  # code belongs to a primitive, which units are deliberately parallel, and
+  # which stay complex up to a ceiling. Each check reads only its own files:
+  # duplication.md for dry, complexity.md for complexity.
   class Contract
     Primitive = Struct.new(:name, :path, :covers)
-    Clause = Struct.new(:primitive, :kind, :path, :line, :heading, :reason, :references, :key)
+    # max is a ceiling's limit, nil for a parallel clause.
+    Clause = Struct.new(:primitive, :kind, :path, :line, :heading, :reason, :references, :key, :max)
 
-    CONTENT = %w[covers parallel settings].freeze
-    SETTING_KEYS = { "threshold" => :threshold, "min-lines" => :min_lines, "min-nodes" => :min_nodes }.freeze
+    CONTENT = %w[covers parallel settings ceiling].freeze
+    # The blocks each check's own file holds, and the settings it takes.
+    BLOCKS = { dry: %w[parallel settings], complexity: %w[ceiling settings] }.freeze
+    SETTING_KEYS = {
+      dry: { "threshold" => :threshold, "min-lines" => :min_lines, "min-nodes" => :min_nodes },
+      complexity: { "floor" => :floor }
+    }.freeze
+    HOME = { "parallel" => "duplication.md", "ceiling" => "complexity.md", "covers" => "README.md" }.freeze
+    # A floor of 0 is allowed: every rise then fails.
+    MINIMUMS = { min_lines: 1, min_nodes: 1, floor: 0 }.freeze
+    MAX = /\Amax:\s*(.*)\z/
 
     attr_reader :primitives, :clauses, :settings, :errors
 
-    def self.load(root, dir: "contract")
-      new(root, dir).tap(&:parse)
+    def self.load(root, dir: "contract", check: :dry)
+      new(root, dir, check).tap(&:parse)
     end
 
-    def initialize(root, dir)
+    def initialize(root, dir, check = :dry)
+      raise ArgumentError, "unknown check #{check.inspect}" unless BLOCKS.key?(check)
+
       @root = Pathname.new(root.to_s)
       @dir = dir
+      @check = check
       @primitives = []
       @clauses = []
       @settings = {}
@@ -75,16 +90,27 @@ module Exhale
       readme = dir.join("README.md")
       each_block(readme) { |block, path| readme_block(covers, block, path) } if real_file?(readme)
       @primitives << Primitive.new(name, rel(dir), covers)
-      duplication_files(dir).each do |file|
-        each_block(file) { |block, path| duplication_block(name, block, path) }
+      check_files(dir).each do |file|
+        each_block(file) { |block, path| check_block(name, block, path) }
       end
       stray_files(dir).each do |file|
-        each_block(file) { |block, path| misplaced(block, path, "found in a stray file; use README.md or duplication.md") if CONTENT.include?(block.info) }
+        each_block(file) do |block, path|
+          next unless CONTENT.include?(block.info)
+
+          misplaced(block, path, "found in a stray file; use README.md, duplication.md or complexity.md")
+        end
       end
     end
 
+    def check_files(dir)
+      return duplication_files(dir) if @check == :dry
+
+      file = dir.join("complexity.md")
+      real_file?(file) ? [file] : []
+    end
+
     def stray_files(dir)
-      known = [dir.join("README.md"), dir.join("duplication.md")].map(&:to_s)
+      known = %w[README.md duplication.md complexity.md].map { |name| dir.join(name).to_s }
       markdown_files(dir).reject { |f| known.include?(f.to_s) || f.to_s.start_with?(dir.join("duplication/").to_s) }
     end
 
@@ -95,7 +121,8 @@ module Exhale
     def readme_block(covers, block, path)
       case block.info
       when "covers" then covers.concat(references(block, path))
-      when "parallel", "settings" then misplaced(block, path, "belongs in duplication.md")
+      when "parallel", "ceiling" then misplaced(block, path, "belongs in #{HOME[block.info]}")
+      when "settings" then misplaced(block, path, "belongs in duplication.md or complexity.md")
       end
     end
 
@@ -128,11 +155,16 @@ module Exhale
       Markdown.blocks(text).each { |block| yield block, path }
     end
 
-    def duplication_block(primitive, block, path)
+    # A block type that belongs to the other check, or to README.md, is an
+    # error where it sits.
+    def check_block(primitive, block, path)
+      return unless CONTENT.include?(block.info)
+      return misplaced(block, path, "belongs in #{HOME[block.info]}") unless BLOCKS[@check].include?(block.info)
+
       case block.info
       when "parallel" then add_clause(primitive, block, path)
-      when "settings" then add_settings(primitive, block, path)
-      when "covers" then misplaced(block, path, "belongs in README.md")
+      when "ceiling" then add_ceiling(primitive, block, path)
+      else add_settings(primitive, block, path)
       end
     end
 
@@ -151,6 +183,35 @@ module Exhale
       @clauses << Clause.new(primitive, :parallel, path, block.line, block.heading, block.reason, refs, key)
     end
 
+    # A ceiling names units and gives one `max: N` they may reach.
+    def add_ceiling(primitive, block, path)
+      lines = block.body.map { |text, no| [Markdown.strip_comment(text), no] }.reject { |line, _| line.empty? }
+      maxes, names = lines.partition { |line, _| MAX.match?(line) }
+      return @errors << ContractError.new(path, block.line, "ceiling block names no unit") if names.empty?
+      return unless (max = ceiling_max(maxes, block, path))
+
+      refs = names.map { |line, no| Reference.new(line, path, no) }
+      key = Digest::SHA256.hexdigest("#{primitive}|ceiling|#{max}|#{refs.map(&:text).sort.join("\n")}")
+      @clauses << Clause.new(primitive, :ceiling, path, block.line, block.heading, block.reason, refs, key, max)
+    end
+
+    # The one max a ceiling gives, or nil once the reason it has none is
+    # recorded.
+    def ceiling_max(maxes, block, path)
+      return ceiling_error(path, block.line, "ceiling block needs max: N") if maxes.empty?
+      return ceiling_error(path, maxes[1].last, "repeated max in a ceiling block") if maxes.size > 1
+
+      text, no = maxes.first
+      value = MAX.match(text)[1]
+      max = Integer(value, 10, exception: false)
+      max && max >= 0 ? max : ceiling_error(path, no, "bad value for max: #{value.inspect}")
+    end
+
+    def ceiling_error(path, line, message)
+      @errors << ContractError.new(path, line, message)
+      nil
+    end
+
     def add_settings(primitive, block, path)
       if @settings.key?(primitive)
         return @errors << ContractError.new(path, block.line, "second settings block for #{primitive}")
@@ -166,7 +227,7 @@ module Exhale
 
     def parse_setting(line, path, no, acc)
       key, value = line.split(":", 2).map(&:strip)
-      sym = SETTING_KEYS[key]
+      sym = SETTING_KEYS[@check][key]
       return @errors << ContractError.new(path, no, "unknown setting: #{key}") unless sym
 
       parsed = setting_value(sym, value)
@@ -183,7 +244,7 @@ module Exhale
         f if f && f > 0 && f <= 1
       else
         i = Integer(value.to_s, 10, exception: false)
-        i if i && i >= 1
+        i if i && i >= MINIMUMS.fetch(sym)
       end
     end
 

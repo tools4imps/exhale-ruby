@@ -4,7 +4,7 @@ Clauses are how a team declares deliberate duplication, the code each primitive 
 
 ## Obligations
 
-- **C1** Only `contract/<primitive>/README.md` (for `covers`) `contract/<primitive>/duplication.md` or `duplication/**/*.md` (for `parallel` and `settings`), and `contract/<primitive>/complexity.md` (for `ceiling` and `settings`) are read. Each check reads only its own files, and a block type in the other check's file is an error. A block in the wrong file (another Markdown file in a primitive, or a file at the Contract's root) is an error, and so is a symlink anywhere in the Contract.
+- **C1** Only `contract/<primitive>/README.md` (for `covers`), `contract/<primitive>/duplication.md` or `duplication/**/*.md` (for `parallel` and `settings`), and `contract/<primitive>/complexity.md` (for `ceiling` and `settings`) are read. Each check reads only its own files, and a block type in the other check's file is an error. A block in the wrong file (another Markdown file in a primitive, or a file at the Contract's root) is an error, and so is a symlink anywhere in the Contract.
 - **C2** A clause keeps a pair only when the two units take different references. Each unit takes its most specific matching reference, and for a glob, its longest matching prefix.
 - **C3** An empty `parallel` block is an error, and so is a reference that names no unit. A clause that keeps nothing is stale, and stale is an error. A clause added since the base is flagged in the report.
 - **C4** A unit belongs to the primitive whose `covers` reference matches it most specifically.
