@@ -38,6 +38,16 @@ class RatchetTest < Minitest::Test
   end
 
   # Contract: ratchet/T6
+  def test_a_ceiling_under_the_floor_never_tightens_it
+    base = scored("class A\n#{method('f', 1)}end\n", "a.rb")
+    head = scored("class A\n#{method('f', 3)}end\n", "a.rb")
+    ceiling = Exhale::Contract::Clause.new("p", :ceiling, "contract/p/complexity.md", 1, "", "", [], "k", 2)
+    assert_equal [:rose], ratchet(head, base, ceiling: ceiling).rows.map(&:label)
+    head = scored("class A\n#{method('f', 9)}end\n", "a.rb")
+    assert_equal [:raised], ratchet(head, base, ceiling: ceiling).rows.map(&:label)
+  end
+
+  # Contract: ratchet/T6
   def test_the_most_specific_ceiling_wins_and_a_tie_takes_the_lower_max
     Dir.mktmpdir("exhale-ceilings") do |dir|
       FileUtils.mkdir_p(File.join(dir, "app", "models"))

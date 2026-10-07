@@ -14,10 +14,12 @@ module Exhale
   module Complexity
     DEFAULT_FLOOR = 8
 
-    # rows are narrowed to the run's paths. floor is the default floor the
-    # report was judged with: the Contract's, or --floor's.
-    Result = Struct.new(:rows, :clause_errors, :parse_errors, :base_sha, :notes, :exit_code, :floor,
-                        keyword_init: true)
+    # rows are narrowed to the run's paths. floor is the floor the report
+    # was judged with: the default, or --floor's. floors are the primitives
+    # that set their own, by name. contract_failing are the rows that fail
+    # under the Contract's floors and pass under --floor's.
+    Result = Struct.new(:rows, :clause_errors, :parse_errors, :base_sha, :notes, :exit_code, :floor, :floors,
+                        :contract_failing, keyword_init: true)
 
     # The complexity check: scores every Ruby unit at the head and at the
     # merge base, and hands both to the Ratchet.
@@ -42,7 +44,7 @@ module Exhale
         base = base_scores(base_sha) if base_sha
         no_base_note(base_sha)
         ceilings = ceiling_lookup(contract)
-        errors = contract.errors + @resolver.errors + stale(contract, head)
+        errors = contract.errors + @resolver.errors + ceiling_errors(contract, head)
 
         judge = lambda do |floor_for|
           narrow(Ratchet.new(head: head, base: base, floor_for: floor_for, ceiling_for: ceilings).rows)
@@ -50,7 +52,8 @@ module Exhale
         verdict = judge.call(method(:contract_floor))
         rows = @floor ? judge.call(->(_unit) { @floor }) : verdict
         Result.new(rows: rows, clause_errors: errors, parse_errors: parse_errors, base_sha: base_sha, notes: notes,
-                   exit_code: exit_code(parse_errors, verdict, errors), floor: @floor || DEFAULT_FLOOR)
+                   exit_code: exit_code(parse_errors, verdict, errors), floor: @floor || DEFAULT_FLOOR,
+                   floors: floors(contract), contract_failing: contract_failing(verdict, rows))
       end
 
       # The SHA of the merge base, or nil when there's none to compare with.
@@ -78,8 +81,28 @@ module Exhale
       def no_base_note(base_sha)
         return if base_sha
 
-        why = @git.repo? ? "no merge base found" : "not a git repository"
-        @notes.unshift("#{why}, so nothing is compared; units over the floor are warnings")
+        advice = "; pass --base REF to compare" if @git.repo? && !@git.default_branch_ref
+        @notes.unshift("#{no_base_reason}, so nothing is compared; units over the floor are warnings#{advice}")
+      end
+
+      def no_base_reason
+        return "not a git repository" unless @git.repo?
+        return "no merge base found" if @git.default_branch_ref
+
+        *first, last = Git::DEFAULT_CANDIDATES
+        "no default branch found (origin/HEAD, #{first.join(', ')} or #{last})"
+      end
+
+      # Both lists hold the same units in the same order.
+      def contract_failing(verdict, rows)
+        verdict.zip(rows).filter_map { |contract, shown| contract if contract.failing? && !shown.failing? }
+      end
+
+      # Under --floor every primitive takes it, so none has its own.
+      def floors(contract)
+        return {} if @floor
+
+        contract.settings.filter_map { |name, settings| [name, settings[:floor]] if settings.key?(:floor) }.to_h
       end
 
       def notes
@@ -112,20 +135,26 @@ module Exhale
         contract.clauses.select { |clause| clause.kind == :ceiling }
       end
 
-      # A ceiling is stale once nothing it names sits over the floor.
-      def stale(contract, head)
+      def ceiling_errors(contract, head)
         scores = head.each_with_object({}.compare_by_identity) { |scored, map| map[scored.unit] = scored.score }
         ceilings(contract).filter_map do |clause|
-          next unless stale?(clause, scores)
-
-          ContractError.new(clause.path, clause.line,
-                            "stale ceiling: nothing it names scores over the floor; delete it")
+          problem = ceiling_problem(clause, scores)
+          ContractError.new(clause.path, clause.line, problem) if problem
         end
       end
 
-      def stale?(clause, scores)
-        units = clause.references.flat_map { |ref| @resolver.units_for(ref) }.select { |unit| scores.key?(unit) }
-        units.any? && units.none? { |unit| scores[unit] > contract_floor(unit) }
+      # A ceiling has to name a scored unit, and is stale once nothing it
+      # names sits over the floor. A reference that names nothing at all is
+      # already the resolver's error.
+      def ceiling_problem(clause, scores)
+        named = clause.references.flat_map { |ref| @resolver.units_for(ref) }
+        return if named.empty?
+
+        scored = named.select { |unit| scores.key?(unit) }
+        return "ceiling names no scored unit; only methods and DSL bodies are scored" if scored.empty?
+        return if scored.any? { |unit| scores[unit] > contract_floor(unit) }
+
+        "stale ceiling: nothing it names scores over the floor; delete it"
       end
 
       def narrow(rows)

@@ -137,6 +137,16 @@ class RatchetContractTest < Minitest::Test
   end
 
   # Contract: ratchet/T1
+  def test_with_no_default_branch_the_note_says_so
+    git("checkout", "-q", "-b", "trunk")
+    write("app/models/order.rb", klass("Order", method("total", 2)))
+    commit("only a trunk")
+    note = check(base: nil).notes.first
+    assert_match(/no default branch found \(origin\/HEAD, origin\/main, origin\/master, main or master\)/, note)
+    assert_match(/pass --base/, note)
+  end
+
+  # Contract: ratchet/T1
   def test_with_no_merge_base_nothing_is_compared
     git("checkout", "-q", "-b", "trunk")
     write("app/models/order.rb", klass("Order", method("total", 12)))
@@ -145,7 +155,7 @@ class RatchetContractTest < Minitest::Test
     result = check(base: nil)
     assert_equal 0, result.exit_code
     assert_equal({ "Order#total" => :warning }, labels(result))
-    assert_match(/no merge base found, so nothing is compared/, result.notes.first)
+    assert_match(/so nothing is compared/, result.notes.first)
   end
 
   # Contract: ratchet/T2
@@ -308,6 +318,9 @@ class RatchetContractTest < Minitest::Test
     result = check
     assert_equal({ "Billing::Order#total" => :introduced, "Cart#total" => :new }, labels(result))
     assert_equal 3, row(result, "Billing::Order#total").floor
+    assert_equal({ "billing" => 3 }, result.floors)
+    assert_match(/   floor 8, billing 3$/, Exhale::Report.render(result, "text").lines.first)
+    assert_equal({ "billing" => 3 }, JSON.parse(Exhale::Report.render(result, "json"))["floors"])
   end
 
   # Contract: ratchet/T5
@@ -321,6 +334,11 @@ class RatchetContractTest < Minitest::Test
     assert_equal({ "Order#total" => :rose, "Order#small" => :new }, labels(loose))
     assert_equal [20, 1], [loose.floor, loose.exit_code]
     assert(loose.notes.any? { |note| note.include?("--floor 20 overrides the Contract for this report only") })
+
+    text = Exhale::Report.render(loose, "text")
+    assert_match(/failing/, text.lines.first)
+    assert_match(/^FAILS UNDER THE CONTRACT'S FLOORS  Order#total  9 -> 10 \(floor 8\)$/, text)
+    assert_equal ["Order#total"], JSON.parse(Exhale::Report.render(loose, "json"))["contract_failing"]
 
     write("app/models/order.rb", klass("Order", method("total", 9), method("small", 4, tag: "s")))
     strict = check(floor: 2)
@@ -403,6 +421,18 @@ class RatchetContractTest < Minitest::Test
     result = check
     assert_equal ["contract/billing/complexity.md:9"], result.clause_errors.map { |e| "#{e.path}:#{e.line}" }
     assert_match(/names no unit: Order#rates/, result.clause_errors.first.message)
+    assert_equal 1, result.exit_code
+  end
+
+  # Contract: ratchet/T6
+  def test_a_ceiling_that_names_no_scored_unit_is_an_error
+    write("contract/views/complexity.md", "```ceiling\nmax: 12\nviews/orders/**\n```\n")
+    write("app/views/orders/show.html.erb", "<p><%= @order.id %></p>\n")
+    commit("base")
+    branch
+    result = check
+    assert_equal ["contract/views/complexity.md:1"], result.clause_errors.map { |e| "#{e.path}:#{e.line}" }
+    assert_match(/names no scored unit/, result.clause_errors.first.message)
     assert_equal 1, result.exit_code
   end
 

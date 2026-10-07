@@ -58,7 +58,7 @@ class ComplexityReportContractTest < Minitest::Test
     ]
     rows.first.match = :identity
     Exhale::Complexity::Result.new(rows: rows, clause_errors: [], parse_errors: [], base_sha: "a" * 40, notes: [],
-                                   exit_code: 1, floor: 2)
+                                   exit_code: 1, floor: 2, floors: {}, contract_failing: [])
   end
 
   # Contract: report/R5

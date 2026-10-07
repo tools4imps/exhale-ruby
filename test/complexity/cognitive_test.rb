@@ -145,7 +145,7 @@ class CognitiveTest < Minitest::Test
       def handle(event)
         case event                                # +1
         in { type: "paid", amount: Integer => amount } then credit(amount)
-        in { type: "refund", amount: } if amount.positive? then debit(amount) # +2: a guard is a modifier if
+        in { type: "refund", amount: } if amount.positive? then debit(amount) # +1: a guard adds no nesting cost
         in [first, *rest] then batch(first, rest)
         else ignore(event)
         end
@@ -153,7 +153,7 @@ class CognitiveTest < Minitest::Test
         id in String
       end
     RUBY
-    assert_equal 3, score(source, "Object#handle")
+    assert_equal 2, score(source, "Object#handle")
   end
 
   def test_guard_clauses_read_straight_down

@@ -142,8 +142,21 @@ module Exhale
       def case_node(node, nesting)
         nested(node.is_a?(Prism::CaseMatchNode) ? "case/in" : "case", line(node.case_keyword_loc), nesting)
         visit(node.predicate, nesting)
-        node.conditions.each { |condition| visit(condition, nesting + 1) }
+        node.conditions.each { |condition| case_branch(condition, nesting + 1) }
         visit(node.else_clause&.statements, nesting + 1)
+      end
+
+      # A guard on an `in` branch is an if or unless around the pattern in
+      # Prism, but it costs 1 flat.
+      def case_branch(condition, nesting)
+        guard = condition.pattern if condition.is_a?(Prism::InNode)
+        return visit(condition, nesting) unless guard.is_a?(Prism::IfNode) || guard.is_a?(Prism::UnlessNode)
+
+        keyword = guard.is_a?(Prism::IfNode) ? guard.if_keyword_loc : guard.keyword_loc
+        flat("#{keyword.slice} guard", line(keyword), nesting)
+        visit(guard.statements, nesting)
+        visit(guard.predicate, nesting)
+        visit(condition.statements, nesting)
       end
 
       # The else of a begin/rescue and its ensure cost nothing and don't nest.
@@ -218,12 +231,12 @@ module Exhale
         flat("recursion", at, nesting)
       end
 
-      # `&:sym` and `&method(:x)` aren't blocks. A define_method block is a
-      # unit of its own, so it isn't scored here.
+      # `&:sym` and `&method(:x)` aren't blocks. A define_method block inside
+      # a unit is no unit of its own (Units::Ruby stops at a unit), so it
+      # scores here like any block.
       def block(node, nesting)
         block = node.block
         return visit(block, nesting) unless block.is_a?(Prism::BlockNode)
-        return if define_method?(node)
 
         nested("#{node.name} block", line(block.opening_loc), nesting) if iterates?(node.name)
         nested_body(block, nesting)
@@ -232,10 +245,6 @@ module Exhale
       def nested_body(node, nesting)
         visit(node.parameters, nesting + 1)
         visit(node.body, nesting + 1)
-      end
-
-      def define_method?(node)
-        Units::Ruby::DEFINE_METHODS.key?(node.name) && (node.receiver.nil? || node.receiver.is_a?(Prism::SelfNode))
       end
 
       def iterates?(name)

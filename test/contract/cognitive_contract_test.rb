@@ -125,6 +125,18 @@ class CognitiveContractTest < Minitest::Test
     ]
   end
 
+  # Contract: cognitive/K1
+  def test_a_guard_on_an_in_branch_adds_one_with_no_nesting_cost
+    assert_table [
+      # 1 for the case, 1 for the guard
+      ["case a\nin Integer => v if v > 0 then b\nend", 2],
+      ["case a\nin Integer => v unless v > 0 then b\nend", 2],
+      # 1 for the if, 2 for the case inside it, 1 for the guard, 3 for the
+      # ternary in the guarded branch
+      ["if a\n  case b\n  in [x] if x then c ? d : xs\n  end\nend", 7]
+    ]
+  end
+
   # Contract: cognitive/K2
   def test_a_unit_starts_at_nesting_zero_and_a_dsl_block_is_its_body
     source = <<~RUBY
@@ -312,9 +324,35 @@ class CognitiveContractTest < Minitest::Test
         end
       end
     RUBY
-    # 1 for its own ternary and 1 for calling define_method; the nested
-    # def, define_method block and singleton class's def are left out.
-    assert_equal 2, score_of(source, "Builder#build")
+    # 1 for its own ternary, 1 for calling define_method and 2 for the
+    # ternary in its block, which no unit holds but this one. The nested
+    # def and the singleton class's def are left out.
+    assert_equal 4, score_of(source, "Builder#build")
+  end
+
+  # A define_method block is a unit only directly in a class body. Inside a
+  # method or a DSL body nothing else scores it, so its owner does.
+  # Contract: cognitive/K8
+  def test_a_define_method_block_no_unit_holds_scores_inline
+    source = <<~RUBY
+      class A
+        def self.build(ns)
+          ns.each do |n|
+            define_method(n) { |x| if x; if x; if x; end; end; end }
+          end
+        end
+        before_save do
+          define_singleton_method(:y) { |x| x ? 1 : 2 }
+        end
+        define_method(:z) { |x| x ? 1 : 2 }
+      end
+    RUBY
+    # 1 for each, 1 for define_method, then 3, 4 and 5 for the ifs at
+    # nesting 2, 3 and 4.
+    assert_equal 14, score_of(source, "A.build")
+    # 1 for define_singleton_method, 2 for the ternary in its block.
+    assert_equal 3, score_of(source, "A.before_save[1]")
+    assert_equal 1, score_of(source, "A#z")
   end
 
   # Contract: cognitive/K8

@@ -80,13 +80,13 @@ module Exhale
                 similarity: similarity, floor: floor, ceiling: ceiling)
       end
 
-      # A ceiling stands in for the floor as the line a rise can't cross.
+      # A ceiling only loosens: its max stands in for the floor when higher.
       def label(score, base_score, floor, ceiling)
         return :contracted if base_score && score < base_score
         return :unchanged if score == base_score
 
         over, under = OUTCOMES.fetch(situation(base_score))
-        return over if score > (ceiling ? ceiling.max : floor)
+        return over if score > (ceiling ? [ceiling.max, floor].max : floor)
 
         ceiling && score > floor ? :kept : under
       end

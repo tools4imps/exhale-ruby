@@ -38,11 +38,14 @@ module Exhale
     # Shares the duplication report's error lines and places.
     class ComplexityText < Text
       HEADINGS = { raised: "RAISED", introduced: "INTRODUCED", warning: "OVER THE FLOOR" }.freeze
+      CONTRACT_FAILING = "FAILS UNDER THE CONTRACT'S FLOORS"
 
       def render
         @out << header
         @result.notes.each { |note| @out << "note: #{note}" }
         @result.rows.select { |row| HEADINGS.key?(row.label) }.sort_by { |row| order(row) }.each { |row| unit(row) }
+        # Under --floor these units pass in the report but fail the run.
+        @result.contract_failing.each { |row| unit(row, CONTRACT_FAILING) }
         kept
         errors
         @out << ""
@@ -60,17 +63,18 @@ module Exhale
         parts << plural(@result.parse_errors.size, "parse error") unless @result.parse_errors.empty?
         parts << (@result.exit_code.zero? ? "clean" : "failing")
         base = @result.base_sha ? "   base #{@result.base_sha[0, 7]}" : ""
-        "exhale complexity: #{parts.join(', ')}#{base}   floor #{@result.floor}"
+        floors = @result.floors.map { |name, floor| ", #{name} #{floor}" }.join
+        "exhale complexity: #{parts.join(', ')}#{base}   floor #{@result.floor}#{floors}"
       end
 
       def order(row)
         [HEADINGS.keys.index(row.label), -row.head.score, row.unit.path, row.unit.start_line]
       end
 
-      def unit(row)
+      def unit(row, heading = HEADINGS.fetch(row.label))
         head = row.head
         @out << ""
-        @out << "#{HEADINGS.fetch(row.label)}  #{head.unit.identity}  #{scores(row)}"
+        @out << "#{heading}  #{head.unit.identity}  #{scores(row)}"
         @out << "  #{place(head.unit)}"
         @out << "  was #{row.base.unit.identity} at #{place(row.base.unit)}" if row.match == :shape
         Report.worst_lines(head.points).each do |line, total, constructs|
@@ -86,7 +90,7 @@ module Exhale
       end
 
       def hint(row)
-        limit = row.ceiling ? row.ceiling.max : row.floor
+        limit = row.ceiling ? [row.ceiling.max, row.floor].max : row.floor
         case row.label
         when :raised
           "bring it back to #{[row.base.score, limit].max} or less: pull the worst lines into named methods"
@@ -115,10 +119,12 @@ module Exhale
           "check" => "complexity",
           "base" => @result.base_sha,
           "floor" => @result.floor,
+          "floors" => @result.floors,
           "exit_code" => @result.exit_code,
           "counts" => Report.complexity_counts(@result).transform_keys(&:to_s),
           "notes" => @result.notes,
           "units" => @result.rows.map { |row| row(row) },
+          "contract_failing" => @result.contract_failing.map { |row| row.unit.identity },
           "contract_errors" => @result.clause_errors.map { |e| error(e) },
           "parse_errors" => @result.parse_errors.map { |e| error(e) }
         }
