@@ -6,7 +6,7 @@ Exhale aims to be the premier contraction toolkit for Ruby, the checks for the b
 
 Agents duplicate by default. They read the codebase, find a shape that works, and copy it. When pull requests merge without a person reading every diff, the copy reaches main unless a machine stops it, and every session after that copies it again. exhale is that machine for the exhale half of the breath: expand to learn, then contract what you learned into what already exists, in the same PR.
 
-`exhale dry` combines Robert Martin's [dryer](https://github.com/unclebob/dryer) and Ryan Davis's [flay](https://github.com/seattlerb/flay), rebuilt on [Prism](https://github.com/ruby/prism) and [Herb](https://herb-tools.dev) so it reads modern Ruby and ERB the way Rails writes them. The second check, `exhale complexity`, fails a pull request that leaves a method harder to follow than it found it. A CRAP score check and a leaked-guards check are planned.
+`exhale dry` combines Robert Martin's [dryer](https://github.com/unclebob/dryer) and Ryan Davis's [flay](https://github.com/seattlerb/flay), rebuilt on [Prism](https://github.com/ruby/prism) and [Herb](https://herb-tools.dev) so it reads modern Ruby and ERB the way Rails writes them. The second check, `exhale complexity`, fails a pull request that leaves a method harder to follow than it found it. A leaked-guards check is planned.
 
 ## Install
 
