@@ -46,6 +46,10 @@ jobs:
         shell: bash
         run: bundle exec exe/exhale dry --base origin/${{ github.base_ref || 'main' }} | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: exhale complexity
+        shell: bash
+        run: bundle exec exe/exhale complexity --base origin/${{ github.base_ref || 'main' }} | tee -a "$GITHUB_STEP_SUMMARY"
+
   # The mutation gate: every mutant is killed by a test or listed in
   # .mutineer.yml with the reason no test can catch it. Mutineer needs
   # Ruby 3.4, so this job runs on 3.4 with Gemfile.mutation.

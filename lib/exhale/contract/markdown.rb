@@ -69,7 +69,7 @@ module Exhale
         if closes?(line, fence)
           state[:blocks] << finish(fence)
           state[:fence] = nil
-          state[:prose] = [] if %w[parallel settings covers].include?(fence[:info])
+          state[:prose] = [] if %w[parallel settings covers ceiling].include?(fence[:info])
         else
           fence[:body] << [line, no]
         end

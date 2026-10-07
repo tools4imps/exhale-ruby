@@ -1,7 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
+- `exhale complexity` is the second check. It scores every Ruby method and Rails DSL body with Cognitive Complexity at the head and at the merge base, and fails a pull request that raises a unit past the floor (8 by default) or adds one over it. Renamed and moved methods keep their history by identity, then by shape. `complexity.md` in a primitive sets its floor and keeps units up to a ceiling's max. `exhale complexity explain UNIT` prints every point. JSON lists every unit; EDN writes crapper's entries.
+- The Contract loads per check: dry reads `duplication.md`, complexity reads `complexity.md`, and a block that belongs to the other check is an error.
 - The mutation gate moves to Mutineer 1.5. `timeout: 120` in `.mutineer.yml` replaces the `test/support/mutineer_timeout.rb` patch, and 8 ignore entries for continuation lines are gone, because Mutineer now selects tests for the later lines of a multi-line call or hash. The 13 on the right side of a multi-line `&&` stay, because Mutineer still selects no tests for an operand that may never run.
 - `bin/mutate --matrix` reports blind and redundant tests with Mutineer 1.5's kill matrix. It is a separate run, not part of the gate.
 

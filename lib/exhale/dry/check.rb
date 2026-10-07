@@ -11,8 +11,7 @@ require_relative "../version"
 require_relative "../errors"
 require_relative "../git"
 require_relative "../source_files"
-require_relative "../units/ruby"
-require_relative "../units/erb"
+require_relative "../units"
 require_relative "../contract"
 require_relative "normalizer"
 require_relative "fingerprints"
@@ -38,8 +37,7 @@ module Exhale
       end
 
       def run
-        @parse_errors = []
-        @units = read_units
+        @units, @parse_errors = Units.read(@root, files: @files, include_tests: @include_tests)
         @contract = Contract.load(@root, dir: @contract_dir)
         @resolver = Contract::Resolver.new(@contract, @units)
         @index = Index.new(entries)
@@ -54,28 +52,6 @@ module Exhale
       end
 
       private
-
-      # A file that can't be read, or isn't UTF-8, is a parse error like any
-      # other: the gate never passes code it didn't read.
-      def read_units
-        SourceFiles.list(@root, files: @files, include_tests: @include_tests).flat_map do |path, language|
-          source = read_source(path)
-          language == :ruby ? Units::Ruby.extract(source, path) : Units::Erb.extract(source, path)
-        rescue ParseError => e
-          @parse_errors << e
-          []
-        end
-      end
-
-      def read_source(path)
-        source = File.read(File.join(@root, path), encoding: "UTF-8")
-        return source if source.valid_encoding?
-
-        line = source.each_line.find_index { |text| !text.valid_encoding? }.to_i + 1
-        raise ParseError.new(path, line, "isn't valid UTF-8")
-      rescue SystemCallError, IOError => e
-        raise ParseError.new(path, 1, "can't be read: #{e.message}")
-      end
 
       def entries
         @units.each_with_index.map do |unit, id|
