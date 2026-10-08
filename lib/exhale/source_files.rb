@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
+require "yaml"
 require_relative "errors"
 
 module Exhale
   # Lists the Ruby and ERB files exhale analyses.
   module SourceFiles
+    CONFIG_FILE = ".exhale.yml"
     EXCLUDED_ROOTS = %w[vendor node_modules tmp log coverage public storage bin].freeze
     EXCLUDED_PREFIXES = ["app/assets/builds/"].freeze
     # Schema, migrations and settings, at the root and in each engine or pack
@@ -24,8 +26,10 @@ module Exhale
 
     def list(root, files: nil, include_tests: false)
       candidates = files ? files.map(&:to_s) : walk(root)
+      ignored = ignored_globs(root)
       candidates
         .select { |path| language(path) && path_allowed?(path, include_tests) }
+        .reject { |path| ignored?(path, ignored) }
         .sort
         .uniq
         .reject { |path| linked?(root, path) }
@@ -64,6 +68,28 @@ module Exhale
       return false if EXCLUDED_PREFIXES.any? { |p| path.start_with?(p) }
 
       include_tests || !test_path?(path, segments)
+    end
+
+    def ignored?(path, globs)
+      globs.any? { |glob| File.fnmatch?(glob, path, File::FNM_PATHNAME) }
+    end
+
+    def ignored_globs(root)
+      path = File.join(root, CONFIG_FILE)
+      return [] unless File.exist?(path) || File.symlink?(path)
+      raise Error, "#{CONFIG_FILE} must not be a symlink" if File.symlink?(path)
+      return [] unless File.file?(path)
+
+      config = YAML.safe_load(File.read(path, encoding: "UTF-8"), aliases: false)
+      return [] if config.nil?
+      raise Error, "#{CONFIG_FILE} must contain a mapping" unless config.is_a?(Hash)
+
+      ignore = config.fetch("ignore", [])
+      raise Error, "#{CONFIG_FILE} ignore must be a list of glob patterns" unless ignore.is_a?(Array) && ignore.all?(String)
+
+      ignore
+    rescue Psych::Exception => error
+      raise Error, "#{CONFIG_FILE} could not be parsed: #{error.message}"
     end
 
     def test_path?(path, segments)

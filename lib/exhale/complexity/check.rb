@@ -70,7 +70,9 @@ module Exhale
 
       def base_scores(sha)
         Dir.mktmpdir("exhale-complexity") do |dir|
-          files = @git.files_at(sha).select { |path| SourceFiles.language(path) == :ruby }
+          files = @git.files_at(sha).select do |path|
+            SourceFiles.language(path) == :ruby || path == SourceFiles::CONFIG_FILE
+          end
           @git.export_files(sha, files, dir)
           units, errors = Units.read(dir, files: files, include_tests: @include_tests)
           errors.each { |e| @notes << "#{e.path} doesn't parse at the base, so its units count as new" }
