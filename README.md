@@ -31,6 +31,20 @@ Units are methods, the bodies of Rails DSL calls (`scope`, `validate`, callbacks
 
 Class-body declarations like `has_many` and `validates` never count, and neither does anything under `db/`, `config/`, `vendor/` or `tmp/`. Tests are left out unless you pass `--include-tests`, because tests should be DAMP, not DRY.
 
+## Ignoring files
+
+Use `.exhale.yml` to leave files outside the sweep. Patterns are relative to
+the repository root and use Ruby glob syntax:
+
+```yaml
+ignore:
+  - "lib/generators/**/*"
+  - "db/migrate/*"
+```
+
+The same configuration applies to the pull request head and its merge base, so
+an ignored file cannot create a parse failure on either side of the comparison.
+
 Normalization keeps the names of operations and drops the names of things. Method names at call sites survive, so do operators, HTML tags and Stimulus `data-controller` values. Locals, instance variables, constants, symbols and literals become markers. These two methods are the same shape:
 
 ```ruby

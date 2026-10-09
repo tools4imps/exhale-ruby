@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `.exhale.yml` supports an `ignore` list of repository-relative glob patterns.
+  Exhale applies it consistently to the checked-out tree and the merge base.
+
 ## 0.2.0
 
 - `exhale complexity` is the second check. It scores every Ruby method and Rails DSL body with Cognitive Complexity at the head and at the merge base, and fails a pull request that raises a unit past the floor (8 by default) or adds one over it. Renamed and moved methods keep their history by identity, then by shape. `complexity.md` in a primitive sets its floor and keeps units up to a ceiling's max. `exhale complexity explain UNIT` prints every point. JSON lists every unit; EDN writes crapper's entries.

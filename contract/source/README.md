@@ -10,6 +10,7 @@ Source decides which files a sweep reads. Everything after it trusts the list.
 - **S4** A file is skipped as generated only when one of its first five lines is a comment that starts with a generated-code header. A comment that merely mentions generation doesn't count.
 - **S5** Symlinks are never followed, in source or in the Contract.
 - **S6** The list is sorted. At the head it's the files git tracks plus the untracked files git doesn't ignore. A tracked file the working tree has deleted is left out, as the change the author is making. A sparse checkout, which hides files the commit holds, is an error instead (gate/G2).
+- **S7** `.exhale.yml` may declare an `ignore` list of glob patterns. Matching source files are left out at the head and merge base; malformed settings and symlinks are errors.
 
 ```covers
 Exhale::SourceFiles

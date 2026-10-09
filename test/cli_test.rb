@@ -135,6 +135,23 @@ class CLITest < Minitest::Test
     assert_match(/PARSE .*broken\.rb/, out)
   end
 
+  # Value: protects=a repository can exempt non-Ruby generator templates with .exhale.yml, at both the head and merge base; fails_when=the head or exported base ignores the config and a template parse error prevents the gate from running; why_new=SourceFiles receives the config from disk, but base sweeps export an explicit file list; seam=none
+  # Contract: source/S7
+  def test_exhale_config_ignores_files_at_the_head_and_merge_base
+    write(".exhale.yml", "ignore:\n  - lib/generators/**/*\n")
+    write("lib/generators/service/templates/service.rb", "class <%= class_name %>; end\n")
+    write("app/models/user.rb", "class User; end\n")
+    commit("ignore generator templates")
+    git("checkout", "-q", "-b", "feature")
+
+    %w[dry complexity].each do |check|
+      code, out, err = exhale(check, "--base", "main", cache: check == "dry")
+
+      assert_equal 0, code, err
+      refute_match(/PARSE/, out)
+    end
+  end
+
   # Value: protects=flag overrides report but never gate, and a narrowed run gates on the findings inside its paths; fails_when=overrides gate, or a narrowed run passes while a finding sits inside its paths; why_new=the narrowing rule changed after review proved a typo could switch the gate off; seam=none
   # Contract: gate/G6
   # Contract: cli/L4

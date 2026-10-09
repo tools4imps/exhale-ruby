@@ -148,6 +148,43 @@ class SourceFilesTest < Minitest::Test
     kept.each_key { |file| assert_includes listed, file }
   end
 
+  # Contract: source/S7
+  def test_exhale_config_ignores_matching_globs
+    write(".exhale.yml", <<~YAML)
+      ignore:
+        - "lib/generators/**/*"
+        - "app/models/legacy.rb"
+    YAML
+    write("lib/generators/service/templates/service.rb", "class <%= class_name %>; end\n")
+    write("app/models/legacy.rb", "class Legacy; end\n")
+    write("app/models/current.rb", "class Current; end\n")
+
+    listed = Exhale::SourceFiles.list(@root).map(&:first)
+
+    refute_includes listed, "lib/generators/service/templates/service.rb"
+    refute_includes listed, "app/models/legacy.rb"
+    assert_includes listed, "app/models/current.rb"
+  end
+
+  # Contract: source/S7
+  def test_exhale_config_requires_a_list_of_string_globs
+    write(".exhale.yml", "ignore: lib/generators/**/*\n")
+
+    error = assert_raises(Exhale::Error) { Exhale::SourceFiles.list(@root) }
+
+    assert_equal ".exhale.yml ignore must be a list of glob patterns", error.message
+  end
+
+  # Contract: source/S7
+  def test_exhale_config_must_not_be_a_symlink
+    write("shared-exhale.yml", "ignore:\n  - lib/generators/**/*\n")
+    File.symlink(File.join(@root, "shared-exhale.yml"), File.join(@root, ".exhale.yml"))
+
+    error = assert_raises(Exhale::Error) { Exhale::SourceFiles.list(@root) }
+
+    assert_equal ".exhale.yml must not be a symlink", error.message
+  end
+
   # Contract: source/S2
   def test_db_and_config_are_excluded_at_the_root_and_one_level_under_monorepo_dirs
     excluded = %w[engines/billing/db/migrate/1_x.rb packs/billing/config/routes.rb components/a/db/seeds.rb

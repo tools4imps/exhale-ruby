@@ -156,7 +156,9 @@ module Exhale
       # Only the files a sweep can read: source and the Contract.
       def base_files(sha)
         contract = "#{@contract_dir.chomp('/')}/"
-        @git.files_at(sha).select { |path| SourceFiles.language(path) || path.start_with?(contract) }
+        @git.files_at(sha).select do |path|
+          SourceFiles.language(path) || path.start_with?(contract) || path == SourceFiles::CONFIG_FILE
+        end
       end
 
       # Plain JSON, never Marshal: loading a Marshal dump runs whatever it
