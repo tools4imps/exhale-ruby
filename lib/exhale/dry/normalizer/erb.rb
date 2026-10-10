@@ -4,6 +4,7 @@ require "herb"
 require "prism"
 require_relative "../../shape"
 require_relative "ruby"
+require_relative "../../units/depth"
 
 module Exhale
   module Dry
@@ -48,8 +49,8 @@ module Exhale
 
         module_function
 
-        def normalize(node)
-          Walker.new.normalize(node)
+        def normalize(node, path)
+          Walker.new(path).normalize(node)
         end
 
         # Each ERB tag parses on its own, so the walk carries the locals the
@@ -57,11 +58,16 @@ module Exhale
         # into every later tag. Without them `item.name` inside
         # `<% items.each do |item| %>` would read as a call to `item`.
         class Walker
-          def initialize
+          def initialize(path)
+            @path = path
             @scopes = [[]]
+            @level = 0
           end
 
           def normalize(node)
+            @level += 1
+            raise Units::Depth.too_deep(@path) if @level > Units::Depth::LIMIT
+
             name = class_name(node)
             return if DROPPED.include?(name)
 
@@ -74,6 +80,8 @@ module Exhale
             when *CONTROL then control(node)
             else build(node)
             end
+          ensure
+            @level -= 1
           end
 
           private
@@ -96,14 +104,18 @@ module Exhale
               signature = child.content&.value.to_s[STRICT_LOCALS, 1]
               next unless signature
 
-              result = Prism.parse("def _#{signature}; end")
+              result = prism("def _#{signature}; end")
               return result.value.statements.body.first.locals if result.success?
             end
             []
           end
 
+          # An opening tag chosen in a conditional has no attributes of its own:
+          # each branch's tag sits in the conditional, walked like any `<% if %>`.
           def element(node)
-            attributes = node.open_tag ? normalize_all(node.open_tag.children) : []
+            open_tag = node.open_tag
+            parts = class_name(open_tag) == "HTMLConditionalOpenTagNode" ? [open_tag.conditional] : open_tag&.children
+            attributes = normalize_all(parts)
             body = normalize_all(node.body)
             children = body.empty? ? attributes : attributes + [run("html_body", body, node)]
             build(node, label: node.tag_name&.value&.downcase, children: children)
@@ -202,11 +214,21 @@ module Exhale
           # Parses with the template's locals in scope, and keeps any locals
           # the code assigns for the tags after it.
           def parse(code, line)
-            result = Prism.parse(code, line: line, scopes: @scopes)
+            result = prism(code, line: line, scopes: @scopes)
             return unless result.success?
 
             @scopes.last.concat(result.value.locals - @scopes.last)
             result.value.statements.body
+          end
+
+          # Every tree counts from the level below the node being walked, the
+          # ones a failed parse throws away too: Prism builds them in C, and
+          # dry parses them again on the main thread, where its overflow
+          # could be rescued only once.
+          def prism(code, **options)
+            result = Prism.parse(code, **options)
+            Units::Depth.check!(result.value, @path, from: @level + 1)
+            result
           end
 
           # A block whose `end` is the one appended to the head is the block

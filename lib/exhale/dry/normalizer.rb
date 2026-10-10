@@ -17,7 +17,7 @@ module Exhale
       def normalize(unit)
         case unit.language
         when :ruby then Ruby.normalize(unit.node)
-        when :erb then Erb.normalize(unit.node)
+        when :erb then Erb.normalize(unit.node, unit.path)
         else raise ArgumentError, "no normalizer for #{unit.language.inspect}"
         end
       end

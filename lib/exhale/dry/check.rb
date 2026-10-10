@@ -148,8 +148,8 @@ module Exhale
       end
 
       def cache_key(sha)
-        parts = [sha, VERSION, Normalizer::VERSION, Prism::VERSION, Herb::VERSION, @include_tests, @git.prefix,
-                 @contract_dir, @overrides.sort.inspect]
+        parts = [sha, VERSION, Normalizer::VERSION, Units::Depth::LIMIT, Prism::VERSION, Herb::VERSION, @include_tests,
+                 @git.prefix, @contract_dir, @overrides.sort.inspect]
         Digest::SHA256.hexdigest(parts.join("\u0000"))[0, 16]
       end
 

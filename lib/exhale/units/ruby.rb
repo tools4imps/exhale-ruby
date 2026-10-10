@@ -2,6 +2,7 @@
 
 require "prism"
 require_relative "../errors"
+require_relative "depth"
 require_relative "../unit"
 
 module Exhale
@@ -37,6 +38,9 @@ module Exhale
 
       def extract(source, path)
         result = Prism.parse(source)
+        # Counted before the syntax errors, so a deep file reads as too deep
+        # whether or not it also has one.
+        Depth.check!(result.value, path)
         if result.failure?
           error = result.errors.first
           raise ParseError.new(path, error.location.start_line, error.message)

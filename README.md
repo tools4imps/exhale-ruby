@@ -169,7 +169,10 @@ With no git repository or no merge base there's nothing to compare, so the run e
 
 ## Determinism
 
-The same commit gets the same verdict on any machine on any day. The verdict reads the commit's tree, its Contract, and the gem versions in its `Gemfile.lock`, and nothing else. Digests are unseeded, weights are fixed-point integers computed without the platform's floating-point log, and every tie breaks on a stable key.
+The same commit gets the same verdict on any machine on any day, apart from the two cases at the end of this section. The verdict reads the commit's tree, its Contract, and the gem versions in its `Gemfile.lock`, and nothing else. Digests are unseeded, weights are fixed-point integers computed without the platform's floating-point log, and every tie breaks on a stable key. A file whose parse tree nests deeper than 200 levels is a parse error, counted before any walk goes past the limit, so with Ruby's default stack sizes the file's depth decides whether it's read. A level is one node of the parse tree, so a long chain like `a + b + c` or `a.b.c` counts a level per link. A file too deep for Prism or Herb to parse at all stops the run with `SystemStackError` and exit 1, as it always did. Two things the commit doesn't decide can still change a verdict:
+
+- A stack smaller than Ruby's defaults, the process's (`ulimit -s`) or the VM's (`RUBY_THREAD_VM_STACK_SIZE`), can stop the run on a file within the limit, as it could before.
+- Herb stops a parse after 1,000 ms of wall-clock time, so a template that takes about that long can parse on a fast machine and time out on a slow or busy one.
 
 ## Narrowing a run
 
