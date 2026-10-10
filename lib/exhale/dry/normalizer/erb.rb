@@ -102,8 +102,12 @@ module Exhale
             []
           end
 
+          # An opening tag chosen in a conditional has no attributes of its own:
+          # each branch's tag sits in the conditional, walked like any `<% if %>`.
           def element(node)
-            attributes = node.open_tag ? normalize_all(node.open_tag.children) : []
+            open_tag = node.open_tag
+            parts = class_name(open_tag) == "HTMLConditionalOpenTagNode" ? [open_tag.conditional] : open_tag&.children
+            attributes = normalize_all(parts)
             body = normalize_all(node.body)
             children = body.empty? ? attributes : attributes + [run("html_body", body, node)]
             build(node, label: node.tag_name&.value&.downcase, children: children)

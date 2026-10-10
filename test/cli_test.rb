@@ -259,6 +259,30 @@ class CLITest < Minitest::Test
     assert_equal 1, Dir[File.join(@dir, "tmp", "exhale", "base-*.json")].size
   end
 
+  # Value: protects=templates whose opening tag is chosen in a conditional are swept at the head and the base and compared like any other; fails_when=the sweep raises NoMethodError on the conditional open tag (issue #17); why_new=no CLI run held such a template; seam=none
+  # Contract: shape/N4
+  def test_templates_with_a_conditional_open_tag_are_compared
+    template = <<~ERB
+      <% if @item.highlight? %>
+        <div class="item highlight" data-controller="item">
+      <% else %>
+        <div class="item">
+      <% end %>
+        <h2><%= @item.title %></h2>
+        <p><%= @item.description %></p>
+        <ul><% @item.tags.each do |tag| %><li><%= tag.name %></li><% end %></ul>
+      </div>
+    ERB
+    write("app/views/items/show.html.erb", template)
+    write("app/views/products/show.html.erb", template)
+    commit("two templates with a conditional open tag")
+
+    code, out, err = exhale("--base", "main")
+
+    assert_equal [1, ""], [code, err]
+    assert_match(/\Aexhale dry: 1 already there/, out)
+  end
+
   # Value: protects=--version and --help print and exit 0; fails_when=either flag is dropped and exits 2 as an unknown option, or prints nothing; why_new=neither flag had a test; seam=none
   def test_version_and_help_print_and_exit_zero
     status, out, err = exhale_exiting("--version")

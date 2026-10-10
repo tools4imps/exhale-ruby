@@ -99,6 +99,31 @@ class NormalizerErbTest < Minitest::Test
                  project(shape.children.first)
   end
 
+  # Value: protects=an element whose opening tag is chosen in a conditional keeps the condition, each branch's attribute names and its body; fails_when=the walk reads children the conditional open tag doesn't have and raises NoMethodError (issue #17), or drops the branches' attributes; why_new=no template chose its opening tag in a conditional; seam=none
+  # Contract: shape/N1
+  # Contract: shape/N4
+  def test_a_conditional_open_tag_keeps_its_condition_and_each_branch_attributes
+    shape = normalize(%(<% if open? %><div class="a"><% else %><div id="b"><% end %><span></span></div>))
+
+    assert_equal ["html_element_node", "div",
+                  ["erb_if_node", nil,
+                   ["erb_logic", nil, ["if_node", nil, ["call_node", "open?"]]],
+                   ["erb_body", nil, ["html_open_tag_node", nil, ["html_attribute_node", "class", [":literal", nil]]]],
+                   ["erb_else_node", nil,
+                    ["erb_logic", nil],
+                    ["erb_body", nil, ["html_open_tag_node", nil, ["html_attribute_node", "id", [":literal", nil]]]]]],
+                  ["html_body", nil, ["html_element_node", "span"]]],
+                 project(shape.children.first)
+  end
+
+  # Value: protects=Stimulus values in a conditional opening tag survive, so templates that wire different controllers aren't copies; fails_when=the conditional open tag's attributes are skipped instead of normalized (issue #17); why_new=no template chose its opening tag in a conditional; seam=none
+  # Contract: shape/N1
+  def test_conditional_open_tags_differing_in_a_stimulus_value_differ
+    template = ->(controller) { %(<% if open? %><div data-controller="#{controller}"><% else %><div><% end %><span></span></div>) }
+
+    refute_equal project(normalize(template.call("dropdown"))), project(normalize(template.call("modal")))
+  end
+
   def test_yield_keeps_its_arguments
     shape = normalize(%(<%= yield :sidebar %>))
 
