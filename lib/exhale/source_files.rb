@@ -75,7 +75,10 @@ module Exhale
     # it as a parse error; dropping it here would let it through the gate
     # unread.
     def generated?(full)
-      head = File.open(full, "rb") { |file| file.read(HEADER_BYTES) }.to_s
+      head = File.open(full, "rb") { |file| file.read(HEADER_BYTES) }
+      # read(n) answers nil for an empty file, which has no header to find.
+      return false unless head
+
       head.force_encoding(Encoding::UTF_8).scrub.each_line.first(5).any? { |line| line.match?(GENERATED) }
     rescue SystemCallError
       false

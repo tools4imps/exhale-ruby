@@ -104,6 +104,18 @@ class SourceFilesTest < Minitest::Test
     assert_includes Exhale::SourceFiles.list(@root).map(&:first), "late.rb"
   end
 
+  # Value: protects=an empty file has no header, so it stays on the list instead of stopping the run; fails_when=the header check modifies the frozen string an empty read gives and raises FrozenError (issue #14); why_new=no fixture was empty; seam=none
+  # Contract: source/S4
+  def test_an_empty_file_has_no_header_and_stays_listed
+    File.binwrite(File.join(@root, "app/models/empty.rb"), "")
+    File.binwrite(File.join(@root, "app/views/users/empty.html.erb"), "")
+
+    listed = Exhale::SourceFiles.list(@root).map(&:first)
+
+    assert_includes listed, "app/models/empty.rb"
+    assert_includes listed, "app/views/users/empty.html.erb"
+  end
+
   # Contract: unit/U9
   def test_unreadable_file_stays_listed_for_the_sweep_to_report
     path = File.join(@root, "locked.rb")

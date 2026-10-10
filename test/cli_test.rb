@@ -200,6 +200,19 @@ class CLITest < Minitest::Test
     assert_match(%r{test/support/receipt_fixture\.rb:\d+-\d+ +Receipt#totals}, out)
   end
 
+  # Value: protects=an empty file at the head and at the merge base leaves both checks running to a verdict; fails_when=either sweep raises on an empty .rb or .html.erb (issue #14); why_new=no CLI run held an empty file; seam=none
+  # Contract: source/S4
+  def test_empty_files_leave_dry_and_complexity_running
+    write("app/models/empty.rb", "")
+    write("app/views/users/empty.html.erb", "")
+    commit("empty files")
+
+    %w[dry complexity].each do |check|
+      code, _out, err = exhale(check, "--base", "main", cache: false)
+      assert_equal [0, ""], [code, err], check
+    end
+  end
+
   # Value: protects=--min-lines and --min-nodes each lower their own floor, report under it, and never gate; fails_when=either flag is dropped, or one flag sets the other's floor; why_new=neither flag had a test; seam=none
   # Contract: cli/L4
   def test_min_lines_and_min_nodes_each_lower_their_own_floor
