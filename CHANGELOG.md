@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- An empty `.rb` or `.html.erb` file no longer stops `exhale dry` and `exhale complexity` with a `FrozenError`, at the head or at the merge base. It has no header, so it stays on the list as source/S4 says.
+
 ## 0.2.0
 
 - `exhale complexity` is the second check. It scores every Ruby method and Rails DSL body with Cognitive Complexity at the head and at the merge base, and fails a pull request that raises a unit past the floor (8 by default) or adds one over it. Renamed and moved methods keep their history by identity, then by shape. `complexity.md` in a primitive sets its floor and keeps units up to a ceiling's max. `exhale complexity explain UNIT` prints every point. JSON lists every unit; EDN writes crapper's entries.
