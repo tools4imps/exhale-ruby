@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "exhale/units/ruby"
+require "tmpdir"
+require "fileutils"
+require "exhale/units"
 
 class UnitsRubyTest < Minitest::Test
   # Contract: unit/U1
@@ -188,6 +190,68 @@ class UnitsRubyTest < Minitest::Test
     assert_equal "app/models/order.rb", error.path
     assert_kind_of Integer, error.line
     assert_match(/\Aapp\/models\/order\.rb:\d+: /, error.message)
+  end
+
+  # Value: protects=a tree up to the depth limit is read and one level deeper is a parse error naming the file, the same on every machine; fails_when=a deep file reaches the recursive walks and overflows the stack, or the limit is off by one (issue #19); why_new=no tree was ever measured; seam=none
+  # Contract: unit/U9
+  def test_a_tree_deeper_than_the_limit_is_a_parse_error
+    nested = ->(levels) { "X = #{'[' * levels}1#{']' * levels}\n" } # program, statements, write and integer add 4
+    limit = Exhale::Units::Depth::LIMIT
+
+    assert_empty extract(nested.call(limit - 4))
+    error = assert_raises(Exhale::ParseError) { extract(nested.call(limit - 3), "app/models/deep.rb") }
+    assert_equal "app/models/deep.rb:1: nests deeper than #{limit} levels", error.message
+  end
+
+  # Value: protects=a file too deep reads as the depth limit even when it also has a syntax error; fails_when=the syntax error is reported while Prism returns, and the depth limit only once a smaller stack makes Prism overflow, so the message depends on the machine; why_new=every deep file tested parsed cleanly; seam=none
+  # Contract: unit/U9
+  def test_a_deep_file_with_a_syntax_error_reads_as_the_depth_limit
+    source = "def (\nend\nX = #{'[' * 300}1#{']' * 300}\n"
+
+    error = assert_raises(Exhale::ParseError) { extract(source, "app/models/deep.rb") }
+    assert_equal "app/models/deep.rb:1: nests deeper than #{Exhale::Units::Depth::LIMIT} levels", error.message
+  end
+
+  # Value: protects=many files far past the limit in one run each read as the depth limit, quietly, and the rest are still read; fails_when=a deep file reaches a walk that overflows the stack, or a file Prism parses stops the run (issue #19); why_new=the earlier test read two files; seam=none
+  # Contract: unit/U9
+  def test_many_files_far_past_the_limit_read_as_the_depth_limit
+    Dir.mktmpdir do |dir|
+      FileUtils.mkdir_p(File.join(dir, "app/models"))
+      names = (0...30).map { |i| format("d%02d", i) }
+      names.each_with_index do |name, i|
+        source = i.even? ? "X = #{'[' * 5_000}1#{']' * 5_000}\n" : "#{'x { ' * 2_000}1#{' }' * 2_000}\n"
+        File.write(File.join(dir, "app/models/#{name}.rb"), source)
+      end
+      File.write(File.join(dir, "app/models/order.rb"), "class Order\n  def total; end\nend\n")
+      units = errors = nil
+
+      assert_silent { units, errors = Exhale::Units.read(dir) }
+
+      assert_equal ["Order#total"], units.map(&:identity)
+      assert_equal names.map { |name| "app/models/#{name}.rb:1: nests deeper than #{Exhale::Units::Depth::LIMIT} levels" },
+                   errors.map(&:message).sort
+    end
+  end
+
+  # Value: protects=Prism parses on the caller's stack, where a file it can't parse stops the run instead of being rescued; fails_when=parsing moves onto a thread whose overflow is rescued, which leaves the process to die later with a signal (issue #19); why_new=parsing ran on a thread before; seam=Prism.parse wrapped to record its thread
+  # Contract: unit/U9
+  def test_prism_parses_on_the_callers_stack
+    parse = Prism.method(:parse)
+    threads = []
+    Prism.define_singleton_method(:parse) { |*args, **opts| threads << Thread.current and parse.call(*args, **opts) }
+
+    extract("X = 1\n")
+
+    assert_equal [Thread.current], threads
+  ensure
+    Prism.define_singleton_method(:parse, parse)
+  end
+
+  # Value: protects=a file past Prism's own nesting limit reads as the depth limit; fails_when=the tree Prism returns at its limit isn't counted before its errors, so Prism's nesting_too_deep error is passed on as it is (issue #19); why_new=no file reached Prism's limit; seam=none
+  # Contract: unit/U9
+  def test_prisms_own_nesting_limit_reads_as_the_depth_limit
+    error = assert_raises(Exhale::ParseError) { extract("#{'x { ' * 5_000}1#{' }' * 5_000}\n", "a.rb") }
+    assert_equal "a.rb:1: nests deeper than #{Exhale::Units::Depth::LIMIT} levels", error.message
   end
 
   # Contract: unit/U6

@@ -284,7 +284,7 @@ class NormalizerErbTest < Minitest::Test
   private
 
   def normalize(source)
-    Exhale::Dry::Normalizer::Erb.normalize(Herb.parse(source, strict: false).value)
+    Exhale::Dry::Normalizer::Erb.normalize(Herb.parse(source, strict: false).value, "app/views/a.html.erb")
   end
 
   # Shapes compare with their line numbers; this view compares structure.

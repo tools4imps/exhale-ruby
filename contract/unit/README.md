@@ -12,7 +12,7 @@ A unit is anything that can appear in a finding: a method, the body of a Rails D
 - **U6** Identities are unique within a file. A repeat gets `[2]`, `[3]` and so on, in source order.
 - **U7** A unit's lines cover its whole source, heredoc bodies included.
 - **U8** A template is one unit, named by its path with the leading `app/` removed.
-- **U9** A file that doesn't parse cleanly, can't be read, or isn't valid UTF-8 raises a parse error naming the file, so the gate exits 2 rather than passing code it never read.
+- **U9** A file that doesn't parse cleanly, can't be read, isn't valid UTF-8, or whose parse tree nests deeper than 200 levels raises a parse error naming the file, so the gate exits 2 rather than passing code it never read. A level is one node of the parse tree, so each link of an operator or method chain is a level, and a template counts as the ERB normalizer walks it: a tag's Ruby, parsed with the locals of the tags before it in scope, counts from the tag's level, and the signature in a partial's strict locals comment from the template's top. Prism stopping at its own nesting limit gives the same error, and so does Herb's nesting limit for the Ruby in a tag. A file too deep for Prism or Herb to parse without overflowing the stack stops the run instead, as README's Determinism section says.
 
 ```covers
 Exhale::Units

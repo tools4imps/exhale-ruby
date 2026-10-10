@@ -335,4 +335,44 @@ class CLITest < Minitest::Test
     code, out, err = exhale("dry", "explain", "A#x", "C#z")
     assert_equal [2, "", "exhale: no unit named C#z\n"], [code, out, err]
   end
+
+  # Value: protects=complexity still reads a template whose opening tag is chosen in a conditional, now that reading a template walks it for its depth; fails_when=the depth walk raises NoMethodError on the conditional open tag (issue #17) and complexity exits 1 on a file it read before; why_new=complexity never walked a template; seam=none
+  def test_complexity_reads_a_template_with_a_conditional_open_tag
+    write("app/views/items/show.html.erb", <<~ERB)
+      <% if @item.highlight? %>
+        <div class="item highlight">
+      <% else %>
+        <div class="item">
+      <% end %>
+        <p><%= @item.title %></p>
+      </div>
+    ERB
+    commit("a conditional open tag")
+
+    code, out, err = exhale("complexity", "--base", "main", cache: false)
+
+    assert_equal [0, ""], [code, err]
+    assert_match(/\Aexhale complexity: .*clean/, out)
+  end
+
+  # Value: protects=a file deeper than the limit is reported as a parse error and exits 2 from both checks, whatever stack the machine has; fails_when=the depth check is skipped, so the verdict depends on whether the walks overflow (issue #19); why_new=no CLI run held a file that deep; seam=none
+  # Contract: unit/U9
+  def test_a_file_deeper_than_the_limit_exits_two_from_both_checks
+    levels = Exhale::Units::Depth::LIMIT + 10
+    write("app/views/a/show.html.erb", "#{'<div>' * levels}x#{'</div>' * levels}\n")
+    write("app/models/d.rb", "class D\n  def x\n    #{'[' * levels}1#{']' * levels}\n  end\nend\n")
+    write("app/views/b/show.html.erb", "<% x = 1 %>\n<%= x %#{'(' * levels}1#{')' * levels} %>\n")
+    commit("deep files")
+    too_deep = "nests deeper than #{Exhale::Units::Depth::LIMIT} levels"
+
+    code, out, err = exhale("--base", "main")
+    assert_equal [2, ""], [code, err]
+    assert_match(%r{^PARSE +app/models/d\.rb:1: #{too_deep}$}, out)
+    assert_match(%r{^PARSE +app/views/a/show\.html\.erb:1: #{too_deep}$}, out)
+    assert_match(%r{^PARSE +app/views/b/show\.html\.erb:1: #{too_deep}$}, out)
+
+    code, out, = exhale("complexity", "--base", "main", cache: false)
+    assert_equal 2, code
+    assert_match(%r{app/models/d\.rb:1: #{too_deep}}, out)
+  end
 end

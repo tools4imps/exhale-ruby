@@ -281,4 +281,28 @@ class CheckTest < Minitest::Test
 
     assert_equal [1, 0], [count_base_exports { check }, count_base_exports { check }]
   end
+
+  # Value: protects=a base cached under another depth limit is swept again; fails_when=the key leaves the limit out, so a cache from a version that read deeper files answers for this one and a warm run can pass where a cold one fails; why_new=the limit is new; seam=the limit constant swapped for the second run
+  # Contract: sweep/W2
+  def test_a_cache_from_another_depth_limit_is_not_reused
+    write("app/models/invoice.rb", INVOICE)
+    commit("invoice")
+    git("checkout", "-q", "-b", "feature")
+    write("app/models/receipt.rb", RECEIPT)
+
+    assert_equal [1, 1], [count_base_exports { check }, with_depth_limit(Exhale::Units::Depth::LIMIT + 1) { count_base_exports { check } }]
+  end
+
+  private
+
+  def with_depth_limit(limit)
+    depth = Exhale::Units::Depth
+    old = depth::LIMIT
+    depth.send(:remove_const, :LIMIT)
+    depth.const_set(:LIMIT, limit)
+    yield
+  ensure
+    depth.send(:remove_const, :LIMIT)
+    depth.const_set(:LIMIT, old)
+  end
 end
