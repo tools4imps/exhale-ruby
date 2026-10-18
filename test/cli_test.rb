@@ -110,6 +110,39 @@ class CLITest < Minitest::Test
     assert_match(/\Aexhale dry: clean/, out)
   end
 
+  # Contract: source/S4
+  def test_empty_files_in_the_working_tree_do_not_stop_either_check
+    write("app/models/invoice.rb", INVOICE)
+    commit("invoice")
+    write("app/models/empty.rb", "")
+    write("app/views/empty.html.erb", "")
+
+    %w[dry complexity].each do |check|
+      code, out, err = exhale(check, "--base", "main", "--format", "json", cache: false)
+
+      assert_equal 0, code, err
+      assert_empty JSON.parse(out)["parse_errors"]
+      assert_empty err
+    end
+  end
+
+  # Contract: source/S4
+  def test_empty_files_at_the_merge_base_do_not_stop_either_check
+    write("app/models/empty.rb", "")
+    write("app/views/empty.html.erb", "")
+    commit("empty files")
+    write("app/models/empty.rb", "class Empty; end\n")
+    write("app/views/empty.html.erb", "<p>Content</p>\n")
+
+    %w[dry complexity].each do |check|
+      code, out, err = exhale(check, "--base", "main", "--format", "json", cache: false)
+
+      assert_equal 0, code, err
+      assert_empty JSON.parse(out)["parse_errors"]
+      assert_empty err
+    end
+  end
+
   # Value: protects=exit 2 ("exhale couldn't run") for bad format, unknown option, and unparseable source, never mistaken for a pass or a duplication failure; fails_when=any of the three returns 0 or 1, or a bad format still runs the check; why_new=the rescue/valid_format? paths in cli.rb and the parse-error exit rule have no test; seam=none
   # Contract: gate/G2
   # Contract: cli/L2

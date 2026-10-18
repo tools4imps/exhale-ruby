@@ -7,6 +7,8 @@ require "exhale/source_files"
 
 class SourceFilesTest < Minitest::Test
   KEPT = {
+    "app/models/empty.rb" => "",
+    "app/views/empty.html.erb" => "",
     "app/models/user.rb" => "class User; end\n",
     "app/views/users/show.html.erb" => "<p>hi</p>\n",
     "app/views/users/show.turbo_stream.erb" => "<p>hi</p>\n",
