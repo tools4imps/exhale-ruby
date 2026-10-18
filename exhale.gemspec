@@ -32,7 +32,7 @@ Gem::Specification.new do |spec|
   spec.executables = ["exhale"]
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "bigdecimal", "~> 3.1"
+  spec.add_dependency "bigdecimal", ">= 3.1", "< 5"
   spec.add_dependency "herb", "~> 0.11"
   spec.add_dependency "prism", "~> 1.9"
 

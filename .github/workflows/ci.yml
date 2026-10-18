@@ -13,9 +13,12 @@ jobs:
       matrix:
         # .ruby-version is the Ruby releases are built with. The numbered
         # entries cover the range the gemspec claims to support.
-        ruby: [".ruby-version", "3.3", "3.4"]
+        ruby: [".ruby-version", "3.3", "3.4", "4.0"]
+        bigdecimal: ["~> 3.1", "~> 4.0"]
 
-    name: Ruby ${{ matrix.ruby }}
+    name: Ruby ${{ matrix.ruby }} / BigDecimal ${{ matrix.bigdecimal }}
+    env:
+      BIGDECIMAL_VERSION: ${{ matrix.bigdecimal }}
 
     steps:
       - uses: actions/checkout@v4
