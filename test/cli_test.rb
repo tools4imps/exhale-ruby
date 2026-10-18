@@ -110,6 +110,20 @@ class CLITest < Minitest::Test
     assert_match(/\Aexhale dry: clean/, out)
   end
 
+  # Contract: unit/U4
+  # Contract: gate/G2
+  def test_duplicated_serializer_attributes_fail_the_gate
+    write("app/serializers/invoice.rb", INVOICE.sub("def totals(lines)", "attribute :totals do |lines|"))
+    commit("invoice serializer")
+    write("app/serializers/receipt.rb", RECEIPT.sub("def totals(items)", "attribute :totals do |items|"))
+
+    code, out, err = exhale("dry", "--base", "main")
+
+    assert_equal 1, code, err
+    assert_match(/1 introduced/, out)
+    assert_includes out, "Receipt.attribute(:totals)"
+  end
+
   # Value: protects=exit 2 ("exhale couldn't run") for bad format, unknown option, and unparseable source, never mistaken for a pass or a duplication failure; fails_when=any of the three returns 0 or 1, or a bad format still runs the check; why_new=the rescue/valid_format? paths in cli.rb and the parse-error exit rule have no test; seam=none
   # Contract: gate/G2
   # Contract: cli/L2

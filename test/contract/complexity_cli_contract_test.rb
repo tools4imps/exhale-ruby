@@ -91,6 +91,20 @@ class ComplexityCLIContractTest < Minitest::Test
     assert_includes out, "DeepTest#check"
   end
 
+  # Contract: unit/U4
+  # Contract: cli/L5
+  def test_new_serializer_attributes_over_the_floor_fail_the_gate
+    source = deep("go", 9).sub("def go(a)", "attribute :total do |a|")
+    write("app/serializers/deep.rb", source)
+
+    code, out, err = exhale("complexity", "--base", "main", "--format", "json")
+
+    assert_equal 1, code, err
+    unit = JSON.parse(out)["units"].find { |row| row["identity"] == "Deep.attribute(:total)" }
+    assert_equal "introduced", unit["label"]
+    assert_equal 9, unit["score"]
+  end
+
   # Contract: cli/L5
   def test_complexity_narrowed_to_a_path_gates_only_there
     write("app/models/deep.rb", deep("go", 9))

@@ -19,6 +19,8 @@ module Exhale
         before_action after_action around_action prepend_before_action append_before_action
         prepend_after_action append_after_action rescue_from
         before_perform after_perform around_perform before_enqueue after_enqueue around_enqueue
+        generates_token_for attribute relation_scope
+        before_transition after_transition around_transition
       ].freeze
 
       # Concern blocks whose contents read as the class body itself.

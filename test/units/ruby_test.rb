@@ -128,6 +128,65 @@ class UnitsRubyTest < Minitest::Test
     assert units.all? { |unit| unit.node.is_a?(Prism::BlockNode) }
   end
 
+  # Contract: unit/U4
+  def test_serializer_attributes_inside_traits_are_units
+    units = extract(<<~RUBY)
+      class InvoiceSerializer
+        attributes :id
+        trait :billing do
+          attribute :total do |invoice|
+            invoice.total
+          end
+        end
+      end
+    RUBY
+
+    assert_equal ["InvoiceSerializer.attribute(:total)"], units.map(&:identity)
+  end
+
+  # Contract: unit/U4
+  def test_policy_relation_scopes_are_units
+    units = extract(<<~RUBY)
+      class InvoicePolicy
+        relation_scope do |relation|
+          relation.where(user: user)
+        end
+      end
+    RUBY
+
+    assert_equal ["InvoicePolicy.relation_scope[1]"], units.map(&:identity)
+  end
+
+  # Contract: unit/U4
+  def test_state_machine_callbacks_are_units
+    units = extract(<<~RUBY)
+      class Invoice
+        state_machine :status do
+          event(:pay) { transition pending: :paid }
+          before_transition { |invoice| invoice.prepare }
+          after_transition { |invoice| invoice.notify }
+          around_transition { |invoice, transition, block| block.call }
+        end
+      end
+    RUBY
+
+    assert_equal ["Invoice.before_transition[1]", "Invoice.after_transition[1]", "Invoice.around_transition[1]"],
+                 units.map(&:identity)
+  end
+
+  # Contract: unit/U4
+  def test_token_generation_blocks_are_units
+    units = extract(<<~RUBY)
+      class Invitation
+        generates_token_for :acceptance do
+          token_version
+        end
+      end
+    RUBY
+
+    assert_equal ["Invitation.generates_token_for(:acceptance)"], units.map(&:identity)
+  end
+
   # Contract: unit/U3
   def test_concern_blocks_read_as_the_class_body
     units = extract(<<~RUBY)
@@ -163,6 +222,12 @@ class UnitsRubyTest < Minitest::Test
         before_save :normalize
         before_save :recalculate, if: -> { lines_changed? }
         scope :recent, :ordered
+        attribute :name, :string
+        relation_scope :visible
+        before_transition :prepare
+        after_transition :notify
+        around_transition :wrap
+        generates_token_for :access
       end
     RUBY
 

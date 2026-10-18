@@ -29,6 +29,8 @@ bin/exhale dry
 
 Units are methods, the bodies of Rails DSL calls (`scope`, `validate`, callbacks, `before_action` blocks), and ERB templates. Inside each unit it also compares fragments: blocks, conditionals, HTML elements, and runs of three or more consecutive statements lifted out of the middle of a method.
 
+DSL units also include Rails `generates_token_for`, Alba `attribute`, ActionPolicy `relation_scope`, and state_machines `before_transition`, `after_transition` and `around_transition` blocks. Blocks inside a serializer trait or state machine keep the enclosing class's namespace.
+
 Class-body declarations like `has_many` and `validates` never count, and neither does anything under `db/`, `config/`, `vendor/` or `tmp/`. Tests are left out unless you pass `--include-tests`, because tests should be DAMP, not DRY.
 
 Normalization keeps the names of operations and drops the names of things. Method names at call sites survive, so do operators, HTML tags and Stimulus `data-controller` values. Locals, instance variables, constants, symbols and literals become markers. These two methods are the same shape:
